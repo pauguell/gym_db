@@ -451,47 +451,89 @@ with tab1:
 
     
 # =============================================================================
-# TAB 2: PROGRESSION CHARTS & ANALYTICS (MOBILE OPTIMIZED)
+# TAB 2: PROGRESSION CHARTS & ANALYTICS (WITH HOVER SET DETAILS)
 # =============================================================================
 with tab2:
     st.subheader("📈 Evolució de Rendiment i Volum")
-    st.caption("Gràfics optimitzats per a pantalles tàctils i mòbils.")
+    st.caption("Passa o toca qualsevol punt per veure el desglossament de sèries d'aquell dia.")
 
     if df_filtered.empty:
         st.info("No hi ha dades disponibles per als filtres seleccionats.")
     else:
-        # Standardize colors and styling for mobile
+        # 1. Helper function for set formatting
+        def format_set_hover(row):
+            p = row["Pes (kg)"]
+            r = row["Repeticions"]
+            t = row["Temps (min)"]
+
+            pes_str = f"{int(p)}" if p == int(p) else f"{p}"
+            reps_str = f"{int(r)}" if r == int(r) else f"{r}"
+            temps_str = f"{int(t)}" if t == int(t) else f"{t}"
+
+            if t > 0:
+                return f"{temps_str} min" if p == 0 and r == 0 else f"{pes_str}kg x {reps_str} reps ({temps_str} min)"
+            return f"{pes_str}kg x {reps_str} reps" if p > 0 else f"{reps_str} reps"
+
+        df_tab2 = df_filtered.copy()
+        df_tab2["Set_Desc"] = df_tab2.apply(format_set_hover, axis=1)
+
+        # 2. Compute e1RM per set
+        df_tab2["e1RM"] = np.where(
+            df_tab2["Repeticions"] > 1,
+            df_tab2["Pes (kg)"] / (1.0278 - (0.0278 * df_tab2["Repeticions"])),
+            df_tab2["Pes (kg)"]
+        )
+
+        # 3. Aggregate daily workout details per exercise
+        daily_exercise_summary = (
+            df_tab2.groupby(["Data", "Exercici"])
+            .apply(
+                lambda g: pd.Series({
+                    "Set_Volume": g["Set_Volume"].sum(),
+                    "Max_Pes": g["Pes (kg)"].max(),
+                    "Max_e1RM": g["e1RM"].max(),
+                    "Set_Details_HTML": "<br>".join([f"Sèrie {i+1}: {row['Set_Desc']}" for i, (_, row) in enumerate(g.iterrows())])
+                })
+            )
+            .reset_index()
+        )
+
         mobile_layout_defaults = dict(
             margin=dict(l=10, r=10, t=40, b=40),
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
-                y=-0.3,
+                y=-0.35,
                 xanchor="center",
                 x=0.5
             ),
-            hovermode="x unified",
+            hovermode="closest",
             font=dict(size=11)
         )
 
         # -------------------------------------------------------------
-        # CHART 1: VOLUM TOTAL PER DIA / EXERCI
+        # CHART 1: DAILY VOLUME WITH SET DETAILS HOVER
         # -------------------------------------------------------------
-        daily_vol = (
-            df_filtered.groupby(["Data", "Exercici"])["Set_Volume"]
-            .sum()
-            .reset_index()
-        )
-
         fig_vol = px.line(
-            daily_vol,
+            daily_exercise_summary,
             x="Data",
             y="Set_Volume",
             color="Exercici",
             title="📦 Volum Total Diari (kg)",
             markers=True,
-            labels={"Set_Volume": "Volum (kg)", "Data": "Data"}
+            custom_data=["Set_Details_HTML", "Exercici"]
         )
+
+        fig_vol.update_traces(
+            hovertemplate=(
+                "<b>%{customdata[1]}</b><br>" +
+                "📅 %{x|%d/%m/%Y}<br>" +
+                "📦 Volum Total: %{y:,.0f} kg<br>" +
+                "--------------------<br>" +
+                "%{customdata[0]}<extra></extra>"
+            )
+        )
+
         fig_vol.update_layout(**mobile_layout_defaults)
         fig_vol.update_xaxes(title_text="", showgrid=True)
         fig_vol.update_yaxes(title_text="kg")
@@ -501,24 +543,8 @@ with tab2:
         st.markdown("---")
 
         # -------------------------------------------------------------
-        # CHART 2: ESTIMATED 1RM / PES MÀXIM EVOLUTION
+        # CHART 2: STRENGTH METRIC (e1RM / MAX WEIGHT) WITH SET DETAILS HOVER
         # -------------------------------------------------------------
-        # Calculate e1RM using Brzycki Formula
-        df_filtered["e1RM"] = np.where(
-            df_filtered["Repeticions"] > 1,
-            df_filtered["Pes (kg)"] / (1.0278 - (0.0278 * df_filtered["Repeticions"])),
-            df_filtered["Pes (kg)"]
-        )
-
-        max_metrics = (
-            df_filtered.groupby(["Data", "Exercici"])
-            .agg(
-                Max_Pes=("Pes (kg)", "max"),
-                Max_e1RM=("e1RM", "max")
-            )
-            .reset_index()
-        )
-
         metric_choice = st.radio(
             "Mètrica de Força:",
             options=["e1RM Estimat", "Pes Màxim Aixecat"],
@@ -527,17 +553,28 @@ with tab2:
         )
 
         y_col = "Max_e1RM" if metric_choice == "e1RM Estimat" else "Max_Pes"
-        y_label = "e1RM Estimat (kg)" if metric_choice == "e1RM Estimat" else "Pes Màxim (kg)"
+        y_label = "e1RM Estimat" if metric_choice == "e1RM Estimat" else "Pes Màxim"
 
         fig_strength = px.line(
-            max_metrics,
+            daily_exercise_summary,
             x="Data",
             y=y_col,
             color="Exercici",
             title=f"💪 Evolució de Força ({y_label})",
             markers=True,
-            labels={y_col: y_label, "Data": "Data"}
+            custom_data=["Set_Details_HTML", "Exercici"]
         )
+
+        fig_strength.update_traces(
+            hovertemplate=(
+                "<b>%{customdata[1]}</b><br>" +
+                "📅 %{x|%d/%m/%Y}<br>" +
+                f"💪 {y_label}: %{{y:.1f}} kg<br>" +
+                "--------------------<br>" +
+                "%{customdata[0]}<extra></extra>"
+            )
+        )
+
         fig_strength.update_layout(**mobile_layout_defaults)
         fig_strength.update_xaxes(title_text="", showgrid=True)
         fig_strength.update_yaxes(title_text="kg")
@@ -547,7 +584,7 @@ with tab2:
         st.markdown("---")
 
         # -------------------------------------------------------------
-        # CHART 3: TOTAL SETS / REPS BY MUSCLE GROUP
+        # CHART 3: TOTAL SETS BY MUSCLE GROUP
         # -------------------------------------------------------------
         muscle_summary = (
             df_filtered.groupby("Grup Muscular")
@@ -575,7 +612,7 @@ with tab2:
         fig_muscle.update_yaxes(title_text="Sèries")
 
         st.plotly_chart(fig_muscle, use_container_width=True, config={"displayModeBar": False})
-
+        
 # =============================================================================
 # TAB 3: CALENDAR VIEW, MUSCLE DISTRIBUTION & RAW DATA
 # =============================================================================
