@@ -98,9 +98,7 @@ def build_github_heatmap(df, selected_period):
     
     - Columns: Dilluns - Diumenge (Mon-Sun)
     - Rows: Week 1 - Week N
-    - Visible day numbers inside each box
-    - Lighter gray for rest days
-    - Rainbow color scale for training intensity
+    - Fixed title overlapping by adding vertical spacing and adjusting margins.
     """
     if df.empty or not selected_period:
         return None
@@ -163,7 +161,7 @@ def build_github_heatmap(df, selected_period):
         d_str = row["Data_Dt"].strftime("%d/%m/%Y")
 
         z_matrix[w_idx, d_idx] = sets_val
-        cell_text[w_idx, d_idx] = str(day_num)  # Day number to display in box
+        cell_text[w_idx, d_idx] = str(day_num)
 
         if sets_val > 0:
             hover_text[w_idx, d_idx] = (
@@ -175,7 +173,7 @@ def build_github_heatmap(df, selected_period):
         else:
             hover_text[w_idx, d_idx] = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
 
-    # Rainbow Color Scale (Light Gray for rest, full spectrum for workouts)
+    # Rainbow Color Scale (Light Slate Gray for rest)
     colorscale = [
         [0.00, "#e2e8f0"],   # Rest / empty day (Lighter Slate Gray)
         [0.01, "#6366f1"],   # Indigo (Low activity)
@@ -192,8 +190,8 @@ def build_github_heatmap(df, selected_period):
             z=z_matrix,
             x=days_names,
             y=week_labels,
-            text=cell_text,              # Text shown inside each box
-            texttemplate="%{text}",       # Render text directly inside cells
+            text=cell_text,
+            texttemplate="%{text}",
             textfont=dict(size=13, color="#0f172a", family="Arial Black"),
             hovertext=hover_text,
             hoverinfo="text",
@@ -207,9 +205,15 @@ def build_github_heatmap(df, selected_period):
     month_name = start_date.strftime("%B %Y").capitalize()
 
     fig.update_layout(
-        title=f"📅 Calendari de Consistència: {month_name}",
-        height=280 + (max_weeks * 30),
-        margin=dict(l=80, r=20, t=50, b=30),
+        title=dict(
+            text=f"📅 Calendari de Consistència: {month_name}",
+            y=0.98,
+            x=0.01,
+            xanchor="left",
+            yanchor="top"
+        ),
+        height=320 + (max_weeks * 30),  # Slightly increased container height for spacing
+        margin=dict(l=80, r=20, t=90, b=30),  # Increased top margin (t=90) to separate title from x-axis
         yaxis=dict(autorange="reversed", showgrid=False, zeroline=False),
         xaxis=dict(showgrid=False, zeroline=False, side="top"),
         paper_bgcolor="rgba(0,0,0,0)",
