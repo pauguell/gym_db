@@ -162,16 +162,13 @@ def build_github_heatmap(df, selected_period):
         custom_vals.append(iso_str)
         color_vals.append(sets_val)
 
-    # Intensity colorscale (Rest day = light slate gray)
+    # Intuitive 5-Tier Workout Intensity Colorscale
     colorscale = [
-        [0.00, "#e2e8f0"],
-        [0.01, "#6366f1"],
-        [0.20, "#3b82f6"],
-        [0.40, "#06b6d4"],
-        [0.60, "#10b981"],
-        [0.75, "#eab308"],
-        [0.90, "#f97316"],
-        [1.00, "#ef4444"],
+        [0.00, "#f1f5f9"],   # Rest day (Off-white / Light Slate)
+        [0.01, "#34d399"],   # Light session (Soft Green)
+        [0.35, "#0284c7"],   # Moderate session (Deep Teal/Blue)
+        [0.70, "#f97316"],   # Heavy session (Vibrant Orange)
+        [1.00, "#dc2626"],   # Peak All-Time session (Crimson Red)
     ]
 
     fig = go.Figure(
