@@ -98,10 +98,14 @@ def build_github_heatmap(df, selected_period):
     
     - Columns: Dilluns - Diumenge (Mon-Sun)
     - Rows: Week 1 - Week N
-    - Fixed title overlapping by adding vertical spacing and adjusting margins.
+    - Color scale is relative to the ALL-TIME database min (0) and max sets.
     """
     if df.empty or not selected_period:
         return None
+
+    # Calculate global all-time maximum daily set count across the full database
+    daily_sets_all_time = df.groupby(df["Data"].dt.date)["Set_Volume"].count()
+    max_all_time_sets = int(daily_sets_all_time.max()) if not daily_sets_all_time.empty else 1
 
     # Filter dataframe to the selected month
     df_month = df[df["Data"].dt.to_period("M") == selected_period].copy()
@@ -118,7 +122,7 @@ def build_github_heatmap(df, selected_period):
     grid_df = pd.DataFrame({"Data_Dt": all_dates.date})
     grid_df["Data"] = pd.to_datetime(grid_df["Data_Dt"])
 
-    # Aggregate actual user workout logs per day
+    # Aggregate actual user workout logs per day for the selected month
     daily_logs = (
         df_month.groupby(df_month["Data"].dt.date)
         .agg(
@@ -182,7 +186,7 @@ def build_github_heatmap(df, selected_period):
         [0.60, "#10b981"],   # Green
         [0.75, "#eab308"],   # Yellow
         [0.90, "#f97316"],   # Orange
-        [1.00, "#ef4444"],   # Red (Highest intensity)
+        [1.00, "#ef4444"],   # Red (Highest all-time intensity)
     ]
 
     fig = go.Figure(
@@ -196,6 +200,8 @@ def build_github_heatmap(df, selected_period):
             hovertext=hover_text,
             hoverinfo="text",
             colorscale=colorscale,
+            zmin=0,                      # 0 sets = Light Slate Gray
+            zmax=max_all_time_sets,      # Locked to all-time DB maximum sets
             showscale=False,
             xgap=5,
             ygap=5,
@@ -212,8 +218,8 @@ def build_github_heatmap(df, selected_period):
             xanchor="left",
             yanchor="top"
         ),
-        height=320 + (max_weeks * 30),  # Slightly increased container height for spacing
-        margin=dict(l=80, r=20, t=90, b=30),  # Increased top margin (t=90) to separate title from x-axis
+        height=320 + (max_weeks * 30),
+        margin=dict(l=80, r=20, t=90, b=30),
         yaxis=dict(autorange="reversed", showgrid=False, zeroline=False),
         xaxis=dict(showgrid=False, zeroline=False, side="top"),
         paper_bgcolor="rgba(0,0,0,0)",
