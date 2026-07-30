@@ -116,7 +116,7 @@ def delete_row_from_supabase(row_id):
 
 
 # -----------------------------------------------------------------------------
-# 3. HEATMAP BUILDER (Scatter Square Calendar)
+# 3. HEATMAP BUILDER (Scatter Square Calendar):
 # -----------------------------------------------------------------------------
 def build_github_heatmap(df, selected_period):
     """Generates a Monthly Workout Consistency Heatmap with mobile responsive sizing
@@ -280,6 +280,7 @@ st.title("🏋️‍♂️ Pau Güell's Gym Hub")
 st.markdown(
     "Control de volum de sèries, estimació d'1RM, durada i històric de rècards visuals."
 )
+
 
 if df.empty:
     st.warning(
