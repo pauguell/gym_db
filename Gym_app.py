@@ -346,6 +346,45 @@ tab1, tab2, tab3 = st.tabs([
 # TAB 1: PERSONAL RECORDS & PER-EXERCISE SUMMARY
 # =============================================================================
 with tab1:
+    # -------------------------------------------------------------
+    # NEW TABLE: LAST WORKOUT DAY DETAILS
+    # -------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("⏱️ Últim Entrenament per Exercici")
+    st.caption("Detall de les sèries realitzades en l'últim dia d'entrenament registrat per a cada exercici seleccionat.")
+
+    latest_dates = (
+        df_filtered.groupby("Exercici")["Data"]
+        .max()
+        .reset_index()
+    )
+
+    last_workout_sets = pd.merge(
+        df_filtered,
+        latest_dates,
+        on=["Exercici", "Data"],
+        how="inner"
+    ).copy()
+
+    # Ensure Set_Desc exists on this subset
+    last_workout_sets["Set_Desc"] = last_workout_sets.apply(format_set, axis=1)
+
+    last_workout_summary = (
+        last_workout_sets.groupby(["Exercici", "Grup Muscular", "Data"])
+        .apply(lambda g: "<br>".join([f"<b>Sèrie {i+1}:</b> {row['Set_Desc']}" for i, (_, row) in enumerate(g.iterrows())]))
+        .reset_index(name="Detalls")
+    )
+
+    last_workout_summary = last_workout_summary.sort_values(by="Data", ascending=False).reset_index(drop=True)
+    last_workout_summary["Data de l'Últim Entrenament"] = last_workout_summary["Data"].dt.strftime("%d/%m/%Y")
+
+    last_workout_table_df = last_workout_summary[["Exercici", "Grup Muscular", "Data de l'Últim Entrenament", "Detalls"]]
+    st.markdown(last_workout_table_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+    # -------------------------------------------------------------
+    # TABLE: BEST WORKOUT DAY DETAILS
+     # -------------------------------------------------------------
+    
     st.subheader("🏆 Dia de Màxim Rendiment per Exercici")
     st.caption("Resum del dia de màxim registre (Volum, Temps o Repeticions) per a cada exercici seleccionat.")
 
@@ -430,41 +469,7 @@ with tab1:
     table_df = max_summary[["Exercici", "Grup Muscular", "Data del Màxim", "Registre Màxim", "Detalls"]]
     st.markdown(table_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-    # -------------------------------------------------------------
-    # NEW TABLE: LAST WORKOUT DAY DETAILS
-    # -------------------------------------------------------------
-    st.markdown("---")
-    st.subheader("⏱️ Últim Entrenament per Exercici")
-    st.caption("Detall de les sèries realitzades en l'últim dia d'entrenament registrat per a cada exercici seleccionat.")
 
-    latest_dates = (
-        df_filtered.groupby("Exercici")["Data"]
-        .max()
-        .reset_index()
-    )
-
-    last_workout_sets = pd.merge(
-        df_filtered,
-        latest_dates,
-        on=["Exercici", "Data"],
-        how="inner"
-    ).copy()
-
-    # Ensure Set_Desc exists on this subset
-    last_workout_sets["Set_Desc"] = last_workout_sets.apply(format_set, axis=1)
-
-    last_workout_summary = (
-        last_workout_sets.groupby(["Exercici", "Grup Muscular", "Data"])
-        .apply(lambda g: "<br>".join([f"<b>Sèrie {i+1}:</b> {row['Set_Desc']}" for i, (_, row) in enumerate(g.iterrows())]))
-        .reset_index(name="Detalls")
-    )
-
-    last_workout_summary = last_workout_summary.sort_values(by="Data", ascending=False).reset_index(drop=True)
-    last_workout_summary["Data de l'Últim Entrenament"] = last_workout_summary["Data"].dt.strftime("%d/%m/%Y")
-
-    last_workout_table_df = last_workout_summary[["Exercici", "Grup Muscular", "Data de l'Últim Entrenament", "Detalls"]]
-    st.markdown(last_workout_table_df.to_html(escape=False, index=False), unsafe_allow_html=True)
-    
     # -------------------------------------------------------------
     # EXISTING TABLE: TOTALS PER EXERCISE
     # -------------------------------------------------------------
