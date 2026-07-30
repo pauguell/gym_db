@@ -177,30 +177,23 @@ with st.sidebar.expander("➕ **Log New Set to Cloud**", expanded=True):
                 except Exception as e:
                     st.error(f"Error saving set: {e}")
 
-# --- 3B. DELETE MISTAKEN ENTRIES (Filtered for any entry) ---
+# --- 3B. DELETE MISTAKEN ENTRIES ---
 with st.sidebar.expander("🗑️ **Delete / Manage Logs**", expanded=False):
     st.caption("Filter and select any historical entry to delete.")
     
     if not df.empty:
-        # 1. Date filter for deletion lookup
-        del_min_date = df["Data"].min().date()
-        del_max_date = df["Data"].max().date()
+        # 1. Single date filter for deletion lookup
+        min_date_val = df["Data"].min().date()
+        max_date_val = df["Data"].max().date()
         
-        del_date_range = st.date_input(
-            "Filter by Date Range",
-            value=(del_min_date, del_max_date),
-            min_value=del_min_date,
-            max_value=del_max_date,
-            key="del_date_filter"
+        selected_del_date = st.date_input(
+            "Filter by Date",
+            value=max_date_val,
+            min_value=min_date_val,
+            max_value=max_date_val,
+            key="del_single_date_filter"
         )
         
-        if isinstance(del_date_range, tuple) and len(del_date_range) == 2:
-            del_start_date, del_end_date = del_date_range
-        elif isinstance(del_date_range, tuple) and len(del_date_range) == 1:
-            del_start_date = del_end_date = del_date_range[0]
-        else:
-            del_start_date = del_end_date = del_date_range
-
         # 2. Exercise filter for deletion lookup
         available_del_ex = sorted(df["Exercici"].unique().tolist())
         selected_del_ex = st.selectbox(
@@ -209,10 +202,9 @@ with st.sidebar.expander("🗑️ **Delete / Manage Logs**", expanded=False):
             key="del_ex_filter"
         )
         
-        # Apply filters to find the target rows
+        # Apply filters to find the target rows for the selected single date
         del_filtered_df = df[
-            (df["Data"].dt.date >= del_start_date) & 
-            (df["Data"].dt.date <= del_end_date)
+            df["Data"].dt.date == selected_del_date
         ].copy()
         
         if selected_del_ex != "All Exercises":
@@ -244,7 +236,7 @@ with st.sidebar.expander("🗑️ **Delete / Manage Logs**", expanded=False):
                 except Exception as e:
                     st.error(f"Error deleting entry: {e}")
         else:
-            st.info("No logs match the selected filters.")
+            st.info("No logs match the selected date and exercise.")
     else:
         st.info("No logs available to delete.")
 
