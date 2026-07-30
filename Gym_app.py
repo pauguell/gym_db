@@ -241,7 +241,7 @@ with st.sidebar.expander("🗑️ **Delete / Manage Logs**", expanded=False):
         st.info("No logs available to delete.")
 
 # -----------------------------------------------------------------------------
-# GLOBAL FILTERS (FULLY LOCKED SESSION STATE PERSISTENCE)
+# GLOBAL FILTERS (STREAMLIT NATIVE SESSION STATE PERSISTENCE)
 # -----------------------------------------------------------------------------
 with st.sidebar.expander("🔍 Filters", expanded=True):
     min_date = df["Data"].min().date()
@@ -251,7 +251,6 @@ with st.sidebar.expander("🔍 Filters", expanded=True):
     if "global_date_range" not in st.session_state:
         st.session_state["global_date_range"] = (min_date, max_date)
     else:
-        # Clamp bounds to ensure they stay within valid data range
         curr_start, curr_end = st.session_state["global_date_range"]
         st.session_state["global_date_range"] = (
             max(min_date, min(curr_start, max_date)),
@@ -273,45 +272,42 @@ with st.sidebar.expander("🔍 Filters", expanded=True):
     else:
         start_date = end_date = date_range
 
-    # 2. Muscle Group Filter Persistence
+    # 2. Muscle Group Filter Persistence (No 'default' argument to prevent state clash)
     all_mg = sorted(df["Grup Muscular"].unique().tolist())
     
-    if "global_mg" not in st.session_state or not st.session_state["global_mg"]:
+    if "global_mg" not in st.session_state:
         st.session_state["global_mg"] = all_mg
+    else:
+        # Keep only valid muscle groups that still exist in the database
+        st.session_state["global_mg"] = [mg for mg in st.session_state["global_mg"] if mg in all_mg]
+        if not st.session_state["global_mg"]:
+            st.session_state["global_mg"] = all_mg
 
     selected_mg = st.multiselect(
         "Muscle Groups", 
         options=all_mg, 
-        default=[mg for mg in st.session_state["global_mg"] if mg in all_mg],
         key="global_mg"
     )
-    
-    # Fallback if cleared with 'X'
-    if not selected_mg:
-        selected_mg = all_mg
 
-    # 3. Exercise Filter Persistence
+    # 3. Exercise Filter Persistence (No 'default' argument to prevent state clash)
     available_exercises = sorted(
         df[df["Grup Muscular"].isin(selected_mg)]["Exercici"].unique().tolist()
     )
     
-    if "global_exercises" not in st.session_state or not st.session_state["global_exercises"]:
+    if "global_exercises" not in st.session_state:
         st.session_state["global_exercises"] = available_exercises
-
-    valid_default_ex = [ex for ex in st.session_state["global_exercises"] if ex in available_exercises]
-    if not valid_default_ex:
-        valid_default_ex = available_exercises
+    else:
+        st.session_state["global_exercises"] = [
+            ex for ex in st.session_state["global_exercises"] if ex in available_exercises
+        ]
+        if not st.session_state["global_exercises"]:
+            st.session_state["global_exercises"] = available_exercises
 
     selected_exercises = st.multiselect(
         "Exercises", 
         options=available_exercises, 
-        default=valid_default_ex,
         key="global_exercises"
     )
-    
-    # Fallback if cleared with 'X'
-    if not selected_exercises:
-        selected_exercises = available_exercises
 
 df_filtered = df[
     (df["Data"].dt.date >= start_date)
