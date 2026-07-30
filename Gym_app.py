@@ -1,10 +1,11 @@
 import calendar
 import io
+import datetime
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
-import streamlit.components.v1 as components
 from supabase import create_client
 
 # Set Streamlit Page Configuration
@@ -72,7 +73,7 @@ def load_data():
 
 
 # -----------------------------------------------------------------------------
-# HELPERS: SUPABASE ACTIONS
+# HELPERS: SUPABASE ACTIONS & HEATMAP BUILDER
 # -----------------------------------------------------------------------------
 def append_set_to_supabase(new_data):
     payload = {
@@ -92,7 +93,110 @@ def delete_row_from_supabase(row_id):
     st.cache_data.clear()
 
 
-# Load Data Early for UI validation
+def build_github_heatmap(df):
+    """Generates a GitHub-style workout consistency heatmap using Plotly."""
+    if df.empty:
+        return None
+
+    # Determine date range (past 52 weeks up to latest log or today)
+    max_date = df["Data"].max().date()
+    min_date = max_date - datetime.timedelta(days=364)
+
+    # Generate full date backbone
+    all_dates = pd.date_range(start=min_date, end=max_date, freq="D")
+    grid_df = pd.DataFrame({"Data_Dt": all_dates.date})
+    grid_df["Data"] = pd.to_datetime(grid_df["Data_Dt"])
+
+    # Aggregate actual user logs per day
+    daily_logs = (
+        df.groupby(df["Data"].dt.date)
+        .agg(
+            Total_Volume=("Set_Volume", "sum"),
+            Total_Sets=("Set_Volume", "count"),
+            Exercises=("Exercici", lambda x: ", ".join(sorted(x.unique()))),
+        )
+        .reset_index()
+        .rename(columns={"Data": "Data_Dt"})
+    )
+
+    merged = pd.merge(grid_df, daily_logs, on="Data_Dt", how="left")
+    merged["Total_Sets"] = merged["Total_Sets"].fillna(0)
+    merged["Total_Volume"] = merged["Total_Volume"].fillna(0)
+    merged["Exercises"] = merged["Exercises"].fillna("Descans")
+
+    # Map grid positions (Week Number vs Day of Week)
+    merged["Weekday"] = merged["Data"].dt.weekday  # 0=Mon, 6=Sun
+    merged["Year"] = merged["Data"].dt.year
+    merged["IsoWeek"] = merged["Data"].dt.isocalendar().week
+
+    # Create continuous week index for smooth horizontal rendering
+    merged["WeekIdx"] = (
+        (merged["Data"] - merged["Data"].min()).dt.days // 7
+    )
+
+    days_names = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte", "Diumenge"]
+
+    # Build matrix for Plotly Heatmap
+    pivot_sets = merged.pivot(index="Weekday", columns="WeekIdx", values="Total_Sets")
+    pivot_dates = merged.pivot(index="Weekday", columns="WeekIdx", values="Data_Dt")
+    pivot_vol = merged.pivot(index="Weekday", columns="WeekIdx", values="Total_Volume")
+    pivot_ex = merged.pivot(index="Weekday", columns="WeekIdx", values="Exercises")
+
+    # Text hover matrix
+    hover_text = []
+    for r in range(len(pivot_sets)):
+        row_hover = []
+        for c in range(len(pivot_sets.columns)):
+            d_str = pivot_dates.iloc[r, c].strftime("%d/%m/%Y") if pd.notnull(pivot_dates.iloc[r, c]) else ""
+            sets_val = int(pivot_sets.iloc[r, c])
+            vol_val = pivot_vol.iloc[r, c]
+            ex_val = pivot_ex.iloc[r, c]
+
+            if sets_val > 0:
+                txt = f"<b>📅 {d_str}</b><br>🏋️ Sèries: {sets_val}<br>📦 Volum: {vol_val:,.0f} kg<br>💪 Exercicis: {ex_val}"
+            else:
+                txt = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
+            row_hover.append(txt)
+        hover_text.append(row_hover)
+
+    # Custom green colorscale (GitHub-style)
+    colorscale = [
+        [0.0, "#161b22"],    # Rest / empty day (dark)
+        [0.01, "#0e4429"],   # Low activity
+        [0.35, "#006d32"],   # Moderate
+        [0.70, "#26a641"],   # High
+        [1.00, "#39d353"],   # Intense
+    ]
+
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=pivot_sets.values,
+            x=pivot_sets.columns,
+            y=[days_names[i] for i in pivot_sets.index],
+            text=hover_text,
+            hoverinfo="text",
+            colorscale=colorscale,
+            showscale=False,
+            xgap=3,
+            ygap=3,
+        )
+    )
+
+    fig.update_layout(
+        title="🔥 Calendari de Consistència (Últim Any)",
+        height=220,
+        margin=dict(l=60, r=10, t=40, b=20),
+        yaxis=dict(autorange="reverse", showgrid=False, zeroline=False),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=11),
+    )
+
+    return fig
+
+
+# Load Data
 df = load_data()
 
 # =============================================================================
@@ -273,14 +377,19 @@ with st.expander("🛠️ **Section 1: Data Management (Log & Delete)**", expand
                 st.info("No logs available to delete.")
 
 # =============================================================================
-# SECTION 2: WORKOUT VISUALIZATION (Collapsed by Default)
+# SECTION 2: WORKOUT VISUALIZATION (Collapsed by Default with Heatmap)
 # =============================================================================
 with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", expanded=False):
-    st.caption("Selecciona una data per veure el desglossament complet de tots els exercicis i sèries d'aquell dia.")
+    st.caption("Consulta el mapa de consistència diari i selecciona una data per veure el desglossament complet de les sèries.")
 
     if df.empty:
         st.info("No hi ha entrenaments registrats a la base de dades.")
     else:
+        # --- NEW: GITHUB-STYLE HEATMAP AT TOP OF SECTION 2 ---
+        heatmap_fig = build_github_heatmap(df)
+        if heatmap_fig:
+            st.plotly_chart(heatmap_fig, use_container_width=True, config={"displayModeBar": False})
+
         available_dates = pd.to_datetime(df["Data"]).dt.date.unique()
         available_dates = sorted(available_dates, reverse=True)
 
@@ -326,7 +435,6 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                 grup_muscular = ex_group["Grup Muscular"].iloc[0]
                 num_series = len(ex_group)
                 
-                # Exercises in Section 2 now collapsed by default
                 with st.expander(f"💪 **{exercici}** ({grup_muscular}) — {num_series} sèries", expanded=False):
                     for i, (_, row) in enumerate(ex_group.iterrows()):
                         st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
