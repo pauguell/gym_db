@@ -273,12 +273,82 @@ with manage_col2:
         else:
             st.info("No logs available to delete.")
 
-
 # =============================================================================
-# SECTION 2: DATA VISUALIZATION (Filters + Visuals & Analytics)
+# SECTION 2: WORKOUT VISUALIZATION (NEW SECTION)
 # =============================================================================
 st.markdown("---")
-st.header("📊 2. Data Visualization & Analytics")
+st.header("📋 Visualització d'Entrenament per Dia")
+st.caption("Selecciona una data per veure el desglossament complet de tots els exercicis i sèries d'aquell dia.")
+
+if df.empty:
+    st.info("No hi ha entrenaments registrats a la base de dades.")
+else:
+    # 1. Available dates sorted descending (most recent first)
+    available_dates = pd.to_datetime(df["Data"]).dt.date.unique()
+    available_dates = sorted(available_dates, reverse=True)
+
+    # Date Picker / Selectbox for quick single-day selection
+    selected_date = st.selectbox(
+        "📅 Selecciona la Data de l'Entrenament:",
+        options=available_dates,
+        format_func=lambda d: d.strftime("%d/%m/%Y"),
+        key="workout_day_picker"
+    )
+
+    # Filter dataset for selected date
+    df_day = df[pd.to_datetime(df["Data"]).dt.date == selected_date].copy()
+
+    if df_day.empty:
+        st.warning(f"No s'han trobat exercicis per al dia {selected_date.strftime('%d/%m/%Y')}.")
+    else:
+        # Helper function for formatting set descriptions
+        def format_workout_set(row):
+            p = row["Pes (kg)"]
+            r = row["Repeticions"]
+            t = row["Temps (min)"]
+
+            pes_str = f"{int(p)}" if p == int(p) else f"{p}"
+            reps_str = f"{int(r)}" if r == int(r) else f"{r}"
+            temps_str = f"{int(t)}" if t == int(t) else f"{t}"
+
+            if t > 0:
+                return f"{temps_str} min" if p == 0 and r == 0 else f"{pes_str} kg x {reps_str} reps ({temps_str} min)"
+            return f"{pes_str} kg x {reps_str} reps" if p > 0 else f"{reps_str} reps"
+
+        df_day["Set_Desc"] = df_day.apply(format_workout_set, axis=1)
+
+        # Calculate daily totals for quick metric badges
+        total_vol = df_day["Set_Volume"].sum()
+        total_sets = len(df_day)
+        total_exercises = df_day["Exercici"].nunique()
+
+        mcol1, mcol2, mcol3 = st.columns(3)
+        mcol1.metric("🏋️ Exercicis", total_exercises)
+        mcol2.metric("🔢 Total Sèries", total_sets)
+        mcol3.metric("📦 Volum Total", f"{total_vol:,.0f} kg")
+
+        st.markdown("### 🏋️ Exercicis Realitzats")
+
+        # Render each exercise done that day inside a mobile-friendly expander card
+        for exercici, ex_group in df_day.groupby("Exercici"):
+            grup_muscular = ex_group["Grup Muscular"].iloc[0]
+            num_series = len(ex_group)
+            
+            with st.expander(f"💪 **{exercici}** ({grup_muscular}) — {num_series} sèries", expanded=True):
+                for i, (_, row) in enumerate(ex_group.iterrows()):
+                    st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
+
+
+# =============================================================================
+# SECTION 3: DATA VISUALIZATION (TABS 1 & 2 ONLY)
+# =============================================================================
+st.markdown("---")
+st.header("📊 Anàlisi i Comparativa")
+
+tab1, tab2 = st.tabs([
+    "🏆 Rècords i Últims Registres",
+    "📈 Evolució de Rendiment"
+])
 
 if df.empty:
     st.info("Please add data via the Data Management section above to unlock visualizations.")
