@@ -449,6 +449,74 @@ with tab1:
             for i, (_, row) in enumerate(ex_data.iterrows()):
                 st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
 
+    # -------------------------------------------------------------
+    # 3. CALENDAR VIEW
+    # -------------------------------------------------------------
+    st.subheader("📅 Gym Activity Calendar")
+    st.caption("Overview of exercises performed on each day, filtered by your selection.")
+
+    color_palette = ["#2563EB", "#059669", "#D97706", "#DC2626", "#7C3AED", "#DB2777", "#0D9488", "#4F46E5", "#EA580C", "#0891B2"]
+    unique_exercises = sorted(df["Exercici"].unique().tolist())
+    ex_class_map = {ex: f"ex-color-{i % len(color_palette)}" for i, ex in enumerate(unique_exercises)}
+    dynamic_color_css = "\n".join([f".ex-color-{i} {{ background-color: {color} !important; }}" for i, color in enumerate(color_palette)])
+
+    cal_col1, cal_col2 = st.columns(2)
+    with cal_col1:
+        selected_year = st.selectbox("Year", options=sorted(df["Data"].dt.year.unique(), reverse=True), key="cal_year")
+    with cal_col2:
+        months_map = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June", 7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"}
+        selected_month_num = st.selectbox("Month", options=list(months_map.keys()), format_func=lambda x: months_map[x], index=pd.Timestamp.now().month - 1, key="cal_month")
+
+    df_month = df_filtered[(df_filtered["Data"].dt.year == selected_year) & (df_filtered["Data"].dt.month == selected_month_num)]
+    daily_exercises = df_month.groupby(df_month["Data"].dt.day)["Exercici"].unique().apply(list).to_dict()
+
+    month_cal = calendar.monthcalendar(selected_year, selected_month_num)
+    days_of_week = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    full_html_doc = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: transparent; }}
+        .cal-table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
+        .cal-th {{ background-color: #1E293B; color: white; text-align: center; padding: 8px; border: 1px solid #334155; font-size: 13px; }}
+        .cal-td {{ vertical-align: top; height: 100px; border: 1px solid #E2E8F0; padding: 4px; background-color: #F8FAFC; overflow-y: auto; }}
+        .cal-empty {{ background-color: #F1F5F9; border: 1px solid #E2E8F0; }}
+        .cal-day-num {{ font-weight: bold; font-size: 11px; color: #475569; margin-bottom: 4px; }}
+        .cal-badge {{ color: white; padding: 2px 5px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-bottom: 2px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .cal-today {{ background-color: #EFF6FF; border: 2px solid #2563EB; }}
+        {dynamic_color_css}
+    </style>
+    </head>
+    <body>
+    <table class="cal-table">
+        <thead><tr>
+    """
+    for day in days_of_week:
+        full_html_doc += f'<th class="cal-th">{day}</th>'
+    full_html_doc += "</tr></thead><tbody>"
+
+    today = pd.Timestamp.now().date()
+    for week in month_cal:
+        full_html_doc += "<tr>"
+        for day in week:
+            if day == 0:
+                full_html_doc += '<td class="cal-td cal-empty"></td>'
+            else:
+                is_today = (selected_year == today.year and selected_month_num == today.month and day == today.day)
+                cell_class = "cal-td cal-today" if is_today else "cal-td"
+                full_html_doc += f'<td class="{cell_class}"><div class="cal-day-num">{day}</div>'
+                if day in daily_exercises:
+                    for ex in daily_exercises[day]:
+                        css_class = ex_class_map.get(ex, "ex-color-0")
+                        full_html_doc += f'<div class="cal-badge {css_class}" title="{ex}">{ex}</div>'
+                full_html_doc += "</td>"
+        full_html_doc += "</tr>"
+    full_html_doc += "</tbody></table></body></html>"
+
+    components.html(full_html_doc, height=620, scrolling=True)
+
     
 # =============================================================================
 # TAB 2: PROGRESSION CHARTS & ANALYTICS (WITH HOVER SET DETAILS)
@@ -612,76 +680,11 @@ with tab2:
         fig_muscle.update_yaxes(title_text="Sèries")
 
         st.plotly_chart(fig_muscle, use_container_width=True, config={"displayModeBar": False})
-        
+
 # =============================================================================
-# TAB 3: CALENDAR VIEW, MUSCLE DISTRIBUTION & RAW DATA
+# TAB 3: MUSCLE DISTRIBUTION & RAW DATA
 # =============================================================================
 with tab3:
-    st.subheader("📅 Gym Activity Calendar")
-    st.caption("Overview of exercises performed on each day, filtered by your selection.")
-
-    color_palette = ["#2563EB", "#059669", "#D97706", "#DC2626", "#7C3AED", "#DB2777", "#0D9488", "#4F46E5", "#EA580C", "#0891B2"]
-    unique_exercises = sorted(df["Exercici"].unique().tolist())
-    ex_class_map = {ex: f"ex-color-{i % len(color_palette)}" for i, ex in enumerate(unique_exercises)}
-    dynamic_color_css = "\n".join([f".ex-color-{i} {{ background-color: {color} !important; }}" for i, color in enumerate(color_palette)])
-
-    cal_col1, cal_col2 = st.columns(2)
-    with cal_col1:
-        selected_year = st.selectbox("Year", options=sorted(df["Data"].dt.year.unique(), reverse=True), key="cal_year")
-    with cal_col2:
-        months_map = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June", 7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"}
-        selected_month_num = st.selectbox("Month", options=list(months_map.keys()), format_func=lambda x: months_map[x], index=pd.Timestamp.now().month - 1, key="cal_month")
-
-    df_month = df_filtered[(df_filtered["Data"].dt.year == selected_year) & (df_filtered["Data"].dt.month == selected_month_num)]
-    daily_exercises = df_month.groupby(df_month["Data"].dt.day)["Exercici"].unique().apply(list).to_dict()
-
-    month_cal = calendar.monthcalendar(selected_year, selected_month_num)
-    days_of_week = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-
-    full_html_doc = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: transparent; }}
-        .cal-table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
-        .cal-th {{ background-color: #1E293B; color: white; text-align: center; padding: 8px; border: 1px solid #334155; font-size: 13px; }}
-        .cal-td {{ vertical-align: top; height: 100px; border: 1px solid #E2E8F0; padding: 4px; background-color: #F8FAFC; overflow-y: auto; }}
-        .cal-empty {{ background-color: #F1F5F9; border: 1px solid #E2E8F0; }}
-        .cal-day-num {{ font-weight: bold; font-size: 11px; color: #475569; margin-bottom: 4px; }}
-        .cal-badge {{ color: white; padding: 2px 5px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-bottom: 2px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-        .cal-today {{ background-color: #EFF6FF; border: 2px solid #2563EB; }}
-        {dynamic_color_css}
-    </style>
-    </head>
-    <body>
-    <table class="cal-table">
-        <thead><tr>
-    """
-    for day in days_of_week:
-        full_html_doc += f'<th class="cal-th">{day}</th>'
-    full_html_doc += "</tr></thead><tbody>"
-
-    today = pd.Timestamp.now().date()
-    for week in month_cal:
-        full_html_doc += "<tr>"
-        for day in week:
-            if day == 0:
-                full_html_doc += '<td class="cal-td cal-empty"></td>'
-            else:
-                is_today = (selected_year == today.year and selected_month_num == today.month and day == today.day)
-                cell_class = "cal-td cal-today" if is_today else "cal-td"
-                full_html_doc += f'<td class="{cell_class}"><div class="cal-day-num">{day}</div>'
-                if day in daily_exercises:
-                    for ex in daily_exercises[day]:
-                        css_class = ex_class_map.get(ex, "ex-color-0")
-                        full_html_doc += f'<div class="cal-badge {css_class}" title="{ex}">{ex}</div>'
-                full_html_doc += "</td>"
-        full_html_doc += "</tr>"
-    full_html_doc += "</tbody></table></body></html>"
-
-    components.html(full_html_doc, height=620, scrolling=True)
-
     st.markdown("---")
     st.subheader("💪 Set Distribution by Muscle Group")
     mg_counts = df_filtered["Grup Muscular"].value_counts().reset_index()
