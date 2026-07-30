@@ -94,11 +94,13 @@ def delete_row_from_supabase(row_id):
 
 
 def build_github_heatmap(df, selected_period):
-    """Generates a Monthly Workout Consistency Heatmap formatted as a traditional calendar grid.
+    """Generates a Monthly Workout Consistency Heatmap in calendar format.
     
-    Columns: Dilluns - Diumenge (Mon-Sun)
-    Rows: Week 1 - Week N
-    Colors: Gray for rest/non-month days, Blue -> Purple -> Red for active workouts.
+    - Columns: Dilluns - Diumenge (Mon-Sun)
+    - Rows: Week 1 - Week N
+    - Visible day numbers inside each box
+    - Lighter gray for rest days
+    - Rainbow color scale for training intensity
     """
     if df.empty or not selected_period:
         return None
@@ -143,7 +145,7 @@ def build_github_heatmap(df, selected_period):
     merged["MonthWeekIdx"] = (merged["Data"].dt.day + first_weekday - 1) // 7
 
     days_names = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte", "Diumenge"]
-    max_weeks = merged["MonthWeekIdx"].max() + 1
+    max_weeks = int(merged["MonthWeekIdx"].max() + 1)
     week_labels = [f"Setmana {w + 1}" for w in range(max_weeks)]
 
     # Initialize matrices for 7 columns (Mon-Sun) x N rows (Weeks)
@@ -161,7 +163,7 @@ def build_github_heatmap(df, selected_period):
         d_str = row["Data_Dt"].strftime("%d/%m/%Y")
 
         z_matrix[w_idx, d_idx] = sets_val
-        cell_text[w_idx, d_idx] = str(day_num)
+        cell_text[w_idx, d_idx] = str(day_num)  # Day number to display in box
 
         if sets_val > 0:
             hover_text[w_idx, d_idx] = (
@@ -173,13 +175,16 @@ def build_github_heatmap(df, selected_period):
         else:
             hover_text[w_idx, d_idx] = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
 
-    # Blue -> Purple -> Red color scale (Gray for rest)
+    # Rainbow Color Scale (Light Gray for rest, full spectrum for workouts)
     colorscale = [
-        [0.00, "#2d3748"],   # Rest / empty day (Dark Gray)
-        [0.01, "#3b82f6"],   # Low activity (Bright Blue)
-        [0.35, "#8b5cf6"],   # Moderate (Purple)
-        [0.70, "#ec4899"],   # High (Pink / Light Red)
-        [1.00, "#ef4444"],   # Intense (Solid Red)
+        [0.00, "#e2e8f0"],   # Rest / empty day (Lighter Slate Gray)
+        [0.01, "#6366f1"],   # Indigo (Low activity)
+        [0.20, "#3b82f6"],   # Blue
+        [0.40, "#06b6d4"],   # Cyan
+        [0.60, "#10b981"],   # Green
+        [0.75, "#eab308"],   # Yellow
+        [0.90, "#f97316"],   # Orange
+        [1.00, "#ef4444"],   # Red (Highest intensity)
     ]
 
     fig = go.Figure(
@@ -187,15 +192,15 @@ def build_github_heatmap(df, selected_period):
             z=z_matrix,
             x=days_names,
             y=week_labels,
-            text=hover_text,
+            text=cell_text,              # Text shown inside each box
+            texttemplate="%{text}",       # Render text directly inside cells
+            textfont=dict(size=13, color="#0f172a", family="Arial Black"),
+            hovertext=hover_text,
             hoverinfo="text",
-            texttemplate="%{customdata}",
-            customdata=cell_text,
-            textfont=dict(size=12, color="white"),
             colorscale=colorscale,
             showscale=False,
-            xgap=4,
-            ygap=4,
+            xgap=5,
+            ygap=5,
         )
     )
 
@@ -203,7 +208,7 @@ def build_github_heatmap(df, selected_period):
 
     fig.update_layout(
         title=f"📅 Calendari de Consistència: {month_name}",
-        height=300 + (max_weeks * 25),
+        height=280 + (max_weeks * 30),
         margin=dict(l=80, r=20, t=50, b=30),
         yaxis=dict(autorange="reversed", showgrid=False, zeroline=False),
         xaxis=dict(showgrid=False, zeroline=False, side="top"),
