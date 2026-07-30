@@ -393,22 +393,37 @@ with st.expander("🛠️ **Section 1: Data Management (Log & Delete)**", expand
 # SECTION 2: WORKOUT VISUALIZATION (Collapsed by Default with Heatmap)
 # =============================================================================
 with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", expanded=False):
-    st.caption("Consulta el mapa de consistència diari i selecciona una data per veure el desglossament complet de les sèries.")
+    st.caption("Consulta el mapa de consistència mensual i selecciona un dia per veure el desglossament de les sèries.")
 
     if df.empty:
         st.info("No hi ha entrenaments registrats a la base de dades.")
     else:
-        # --- NEW: GITHUB-STYLE HEATMAP AT TOP OF SECTION 2 ---
-        heatmap_fig = build_github_heatmap(df)
+        # 1. Extract available Month-Year periods from dataset
+        df["YearMonth"] = df["Data"].dt.to_period("M")
+        available_months = sorted(df["YearMonth"].unique(), reverse=True)
+
+        # 2. Month Selector Dropdown
+        selected_month_period = st.selectbox(
+            "📆 Selecciona el Mes per a la Consistència:",
+            options=available_months,
+            format_func=lambda m: m.strftime("%B %Y").capitalize(),
+            key="heatmap_month_picker"
+        )
+
+        # 3. Pass BOTH arguments to build_github_heatmap
+        heatmap_fig = build_github_heatmap(df, selected_month_period)
         if heatmap_fig:
             st.plotly_chart(heatmap_fig, use_container_width=True, config={"displayModeBar": False})
 
-        available_dates = pd.to_datetime(df["Data"]).dt.date.unique()
-        available_dates = sorted(available_dates, reverse=True)
+        st.markdown("---")
+
+        # 4. Filter available workout days for the selected month
+        month_dates = df[df["YearMonth"] == selected_month_period]["Data"].dt.date.unique()
+        month_dates = sorted(month_dates, reverse=True)
 
         selected_date = st.selectbox(
             "📅 Selecciona la Data de l'Entrenament:",
-            options=available_dates,
+            options=month_dates,
             format_func=lambda d: d.strftime("%d/%m/%Y"),
             key="workout_day_picker"
         )
@@ -451,7 +466,6 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                 with st.expander(f"💪 **{exercici}** ({grup_muscular}) — {num_series} sèries", expanded=False):
                     for i, (_, row) in enumerate(ex_group.iterrows()):
                         st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
-
 
 # =============================================================================
 # SECTION 3: DATA VISUALIZATION & ANALYTICS (Collapsed by Default)
