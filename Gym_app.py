@@ -94,32 +94,31 @@ def delete_row_from_supabase(row_id):
 
 
 def build_github_heatmap(df, selected_period):
-    """Generates a Monthly Workout Consistency Heatmap for a single selected month.
+    """Generates a Monthly Workout Consistency Heatmap formatted as a traditional calendar grid.
     
-    X-axis: Days of Month (1 to 31)
-    Y-axis: Selected Month
-    Colors: Gray for rest (0), Blue -> Purple -> Red for training intensity.
+    Columns: Dilluns - Diumenge (Mon-Sun)
+    Rows: Week 1 - Week N
+    Colors: Gray for rest/non-month days, Blue -> Purple -> Red for active workouts.
     """
     if df.empty or not selected_period:
         return None
 
-    # Filter dataframe to the selected year-month period
+    # Filter dataframe to the selected month
     df_month = df[df["Data"].dt.to_period("M") == selected_period].copy()
 
-    # Determine start and end date for the selected month
+    # Determine full calendar bounds for the selected month
     start_date = selected_period.to_timestamp().date()
-    # Calculate last day of month
     if start_date.month == 12:
         end_date = datetime.date(start_date.year, 12, 31)
     else:
         end_date = datetime.date(start_date.year, start_date.month + 1, 1) - datetime.timedelta(days=1)
 
-    # Full date grid for the month
+    # Generate complete day-by-day sequence for the month
     all_dates = pd.date_range(start=start_date, end=end_date, freq="D")
     grid_df = pd.DataFrame({"Data_Dt": all_dates.date})
     grid_df["Data"] = pd.to_datetime(grid_df["Data_Dt"])
 
-    # Aggregate daily volume and sets
+    # Aggregate actual user workout logs per day
     daily_logs = (
         df_month.groupby(df_month["Data"].dt.date)
         .agg(
@@ -135,35 +134,44 @@ def build_github_heatmap(df, selected_period):
     merged["Total_Sets"] = merged["Total_Sets"].fillna(0)
     merged["Total_Volume"] = merged["Total_Volume"].fillna(0)
     merged["Exercises"] = merged["Exercises"].fillna("Descans")
-    merged["Day_Of_Month"] = merged["Data"].dt.day
 
-    month_label = start_date.strftime("%B %Y").capitalize()
+    # Map weekday (0=Mon, 6=Sun)
+    merged["Weekday"] = merged["Data"].dt.weekday
 
-    # Build 1x31 row vector for the heatmap
-    full_month_days = list(range(1, 32))
-    day_map = {row["Day_Of_Month"]: row for _, row in merged.iterrows()}
+    # Calculate month week index (Week 1, Week 2, etc.)
+    first_weekday = start_date.weekday()
+    merged["MonthWeekIdx"] = (merged["Data"].dt.day + first_weekday - 1) // 7
 
-    z_vals = []
-    hover_text = []
+    days_names = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte", "Diumenge"]
+    max_weeks = merged["MonthWeekIdx"].max() + 1
+    week_labels = [f"Setmana {w + 1}" for w in range(max_weeks)]
 
-    for d in full_month_days:
-        if d in day_map:
-            row = day_map[d]
-            d_str = row["Data_Dt"].strftime("%d/%m/%Y")
-            sets_val = int(row["Total_Sets"])
-            vol_val = row["Total_Volume"]
-            ex_val = row["Exercises"]
+    # Initialize matrices for 7 columns (Mon-Sun) x N rows (Weeks)
+    z_matrix = np.full((max_weeks, 7), np.nan)
+    cell_text = np.full((max_weeks, 7), "", dtype=object)
+    hover_text = np.full((max_weeks, 7), "", dtype=object)
 
-            z_vals.append(sets_val)
-            if sets_val > 0:
-                txt = f"<b>📅 {d_str}</b><br>🏋️ Sèries: {sets_val}<br>📦 Volum: {vol_val:,.0f} kg<br>💪 Exercicis: {ex_val}"
-            else:
-                txt = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
-            hover_text.append(txt)
+    for _, row in merged.iterrows():
+        w_idx = int(row["MonthWeekIdx"])
+        d_idx = int(row["Weekday"])
+        day_num = row["Data"].day
+        sets_val = int(row["Total_Sets"])
+        vol_val = row["Total_Volume"]
+        ex_val = row["Exercises"]
+        d_str = row["Data_Dt"].strftime("%d/%m/%Y")
+
+        z_matrix[w_idx, d_idx] = sets_val
+        cell_text[w_idx, d_idx] = str(day_num)
+
+        if sets_val > 0:
+            hover_text[w_idx, d_idx] = (
+                f"<b>📅 {d_str}</b><br>"
+                f"🏋️ Sèries: {sets_val}<br>"
+                f"📦 Volum: {vol_val:,.0f} kg<br>"
+                f"💪 Exercicis: {ex_val}"
+            )
         else:
-            # Days that don't exist in the month (e.g., Feb 30/31)
-            z_vals.append(np.nan)
-            hover_text.append("")
+            hover_text[w_idx, d_idx] = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
 
     # Blue -> Purple -> Red color scale (Gray for rest)
     colorscale = [
@@ -176,11 +184,14 @@ def build_github_heatmap(df, selected_period):
 
     fig = go.Figure(
         data=go.Heatmap(
-            z=[z_vals],
-            x=full_month_days,
-            y=[month_label],
-            text=[hover_text],
+            z=z_matrix,
+            x=days_names,
+            y=week_labels,
+            text=hover_text,
             hoverinfo="text",
+            texttemplate="%{customdata}",
+            customdata=cell_text,
+            textfont=dict(size=12, color="white"),
             colorscale=colorscale,
             showscale=False,
             xgap=4,
@@ -188,22 +199,17 @@ def build_github_heatmap(df, selected_period):
         )
     )
 
+    month_name = start_date.strftime("%B %Y").capitalize()
+
     fig.update_layout(
-        title=f"🔥 Consistència de l'Mes: {month_label}",
-        height=140,
-        margin=dict(l=80, r=10, t=40, b=30),
-        yaxis=dict(showgrid=False, zeroline=False),
-        xaxis=dict(
-            title="Dia del Mes",
-            tickmode="linear",
-            tick0=1,
-            dtick=1,
-            showgrid=False,
-            zeroline=False,
-        ),
+        title=f"📅 Calendari de Consistència: {month_name}",
+        height=300 + (max_weeks * 25),
+        margin=dict(l=80, r=20, t=50, b=30),
+        yaxis=dict(autorange="reversed", showgrid=False, zeroline=False),
+        xaxis=dict(showgrid=False, zeroline=False, side="top"),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(size=11),
+        font=dict(size=12),
     )
 
     return fig
@@ -390,34 +396,34 @@ with st.expander("🛠️ **Section 1: Data Management (Log & Delete)**", expand
                 st.info("No logs available to delete.")
 
 # =============================================================================
-# SECTION 2: WORKOUT VISUALIZATION (Collapsed by Default with Heatmap)
+# SECTION 2: WORKOUT VISUALIZATION
 # =============================================================================
 with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", expanded=False):
-    st.caption("Consulta el mapa de consistència mensual i selecciona un dia per veure el desglossament de les sèries.")
+    st.caption("Consulta el mapa de consistència mensual en format calendari i selecciona un dia per veure les sèries.")
 
     if df.empty:
         st.info("No hi ha entrenaments registrats a la base de dades.")
     else:
-        # 1. Extract available Month-Year periods from dataset
+        # Extract available Month-Year periods from dataset
         df["YearMonth"] = df["Data"].dt.to_period("M")
         available_months = sorted(df["YearMonth"].unique(), reverse=True)
 
-        # 2. Month Selector Dropdown
+        # Month Selector Dropdown
         selected_month_period = st.selectbox(
-            "📆 Selecciona el Mes per a la Consistència:",
+            "📆 Selecciona el Mes per al Calendari:",
             options=available_months,
             format_func=lambda m: m.strftime("%B %Y").capitalize(),
             key="heatmap_month_picker"
         )
 
-        # 3. Pass BOTH arguments to build_github_heatmap
+        # Display Calendar Heatmap
         heatmap_fig = build_github_heatmap(df, selected_month_period)
         if heatmap_fig:
             st.plotly_chart(heatmap_fig, use_container_width=True, config={"displayModeBar": False})
 
         st.markdown("---")
 
-        # 4. Filter available workout days for the selected month
+        # Filter available workout dates for the selected month
         month_dates = df[df["YearMonth"] == selected_month_period]["Data"].dt.date.unique()
         month_dates = sorted(month_dates, reverse=True)
 
