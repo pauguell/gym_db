@@ -126,36 +126,37 @@ def build_github_heatmap(df):
 
     # Map grid positions (Week Number vs Day of Week)
     merged["Weekday"] = merged["Data"].dt.weekday  # 0=Mon, 6=Sun
-    merged["Year"] = merged["Data"].dt.year
-    merged["IsoWeek"] = merged["Data"].dt.isocalendar().week
-
-    # Create continuous week index for smooth horizontal rendering
-    merged["WeekIdx"] = (
-        (merged["Data"] - merged["Data"].min()).dt.days // 7
-    )
+    merged["WeekIdx"] = (merged["Data"] - merged["Data"].min()).dt.days // 7
 
     days_names = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte", "Diumenge"]
 
     # Build matrix for Plotly Heatmap
-    pivot_sets = merged.pivot(index="Weekday", columns="WeekIdx", values="Total_Sets")
+    pivot_sets = merged.pivot(index="Weekday", columns="WeekIdx", values="Total_Sets").fillna(0)
     pivot_dates = merged.pivot(index="Weekday", columns="WeekIdx", values="Data_Dt")
-    pivot_vol = merged.pivot(index="Weekday", columns="WeekIdx", values="Total_Volume")
-    pivot_ex = merged.pivot(index="Weekday", columns="WeekIdx", values="Exercises")
+    pivot_vol = merged.pivot(index="Weekday", columns="WeekIdx", values="Total_Volume").fillna(0)
+    pivot_ex = merged.pivot(index="Weekday", columns="WeekIdx", values="Exercises").fillna("Descans")
 
     # Text hover matrix
     hover_text = []
     for r in range(len(pivot_sets)):
         row_hover = []
         for c in range(len(pivot_sets.columns)):
-            d_str = pivot_dates.iloc[r, c].strftime("%d/%m/%Y") if pd.notnull(pivot_dates.iloc[r, c]) else ""
-            sets_val = int(pivot_sets.iloc[r, c])
-            vol_val = pivot_vol.iloc[r, c]
-            ex_val = pivot_ex.iloc[r, c]
+            raw_date = pivot_dates.iloc[r, c]
+            raw_sets = pivot_sets.iloc[r, c]
+            raw_vol = pivot_vol.iloc[r, c]
+            raw_ex = pivot_ex.iloc[r, c]
+
+            d_str = raw_date.strftime("%d/%m/%Y") if pd.notnull(raw_date) else ""
+            sets_val = int(raw_sets) if pd.notnull(raw_sets) else 0
+            vol_val = raw_vol if pd.notnull(raw_vol) else 0.0
+            ex_val = raw_ex if pd.notnull(raw_ex) else "Descans"
 
             if sets_val > 0:
                 txt = f"<b>📅 {d_str}</b><br>🏋️ Sèries: {sets_val}<br>📦 Volum: {vol_val:,.0f} kg<br>💪 Exercicis: {ex_val}"
-            else:
+            elif d_str:
                 txt = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
+            else:
+                txt = ""
             row_hover.append(txt)
         hover_text.append(row_hover)
 
