@@ -121,17 +121,38 @@ with st.sidebar.expander("➕ **Log New Set to Cloud**", expanded=True):
         df[df["Grup Muscular"] == selected_log_mg]["Exercici"].unique()
     )
 
-    with st.form("log_set_form", clear_on_submit=True):
-        log_date = st.date_input("Date", value=pd.Timestamp.now().date())
+    with st.form("log_set_form", clear_on_submit=False):
+        log_date = st.date_input("Date", value=pd.Timestamp.now().date(), key="form_date")
 
         log_ex_option = st.selectbox(
-            "Exercise", options=existing_ex + ["+ Add New Exercise..."]
+            "Exercise", options=existing_ex + ["+ Add New Exercise..."], key="form_ex_select"
         )
 
         if log_ex_option == "+ Add New Exercise...":
-            log_ex = st.text_input("Enter New Exercise Name")
+            log_ex = st.text_input("Enter New Exercise Name", key="form_new_ex_input")
         else:
             log_ex = log_ex_option
+
+        # Quick-fill helper button logic
+        if log_ex_option != "+ Add New Exercise..." and log_ex_option:
+            last_entry_df = df[df["Exercici"] == log_ex_option].sort_values(by="Data", ascending=False)
+            if not last_entry_df.empty:
+                last_row = last_entry_df.iloc[0]
+                default_w = float(last_row["Pes (kg)"])
+                default_r = int(last_row["Repeticions"])
+                default_t = float(last_row["Temps (min)"])
+                st.caption(f"💡 Last logged: {last_row['Data'].strftime('%d/%m/%Y')} → {default_w}kg x {default_r} reps")
+                
+                if st.form_submit_button("⚡ Copy Last Set Values"):
+                    st.session_state["prefill_weight"] = default_w
+                    st.session_state["prefill_reps"] = default_r
+                    st.session_state["prefill_time"] = default_t
+                    st.rerun()
+
+        # Fallback values from session state if copied
+        def_w = st.session_state.get("prefill_weight", None)
+        def_r = st.session_state.get("prefill_reps", None)
+        def_t = st.session_state.get("prefill_time", None)
 
         col_weight, col_reps = st.columns(2)
         with col_weight:
@@ -139,31 +160,32 @@ with st.sidebar.expander("➕ **Log New Set to Cloud**", expanded=True):
                 "Weight (kg)",
                 min_value=0.0,
                 step=0.5,
-                value=None,
+                value=def_w,
                 placeholder="0.0",
             )
         with col_reps:
             log_reps = st.number_input(
-                "Reps", min_value=0, step=1, value=None, format="%d", placeholder="0"
+                "Reps", min_value=0, step=1, value=def_r, format="%d", placeholder="0"
             )
 
         log_time = st.number_input(
             "Duration (min)",
             min_value=0.0,
             step=0.5,
-            value=None,
+            value=def_t,
             placeholder="0.0",
         )
 
         submit_set = st.form_submit_button("💾 Save Set to Cloud")
 
         if submit_set:
-            if not log_ex.strip():
+            final_ex_name = log_ex.strip() if log_ex_option == "+ Add New Exercise..." else log_ex_option
+            if not final_ex_name:
                 st.error("Please enter a valid exercise name.")
             else:
                 new_entry = {
                     "Data": pd.to_datetime(log_date).strftime("%Y-%m-%d"),
-                    "Exercici": log_ex.strip(),
+                    "Exercici": final_ex_name,
                     "Grup Muscular": selected_log_mg.strip(),
                     "Pes (kg)": log_weight if log_weight is not None else 0.0,
                     "Repeticions": log_reps if log_reps is not None else 0,
@@ -172,7 +194,12 @@ with st.sidebar.expander("➕ **Log New Set to Cloud**", expanded=True):
 
                 try:
                     append_set_to_supabase(new_entry)
-                    st.success(f"Saved: {log_ex} ({log_weight}kg x {log_reps} reps)!")
+                    # Clear temporary prefill keys on successful save
+                    st.session_state.pop("prefill_weight", None)
+                    st.session_state.pop("prefill_reps", None)
+                    st.session_state.pop("prefill_time", None)
+                    
+                    st.success(f"Saved: {final_ex_name}!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error saving set: {e}")
