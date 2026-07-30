@@ -449,134 +449,132 @@ with tab1:
             for i, (_, row) in enumerate(ex_data.iterrows()):
                 st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
 
-    # -------------------------------------------------------------
-    # EXISTING TABLE: TOTALS PER EXERCISE
-    # -------------------------------------------------------------
-    st.markdown("---")
-    st.subheader("📊 Resum Totals per Exercici")
-    ex_summary = (
-        df_filtered.groupby(["Exercici", "Grup Muscular"])
-        .agg(
-            Sessions=("Data", "nunique"),
-            Total_Volume=("Set_Volume", "sum"),
-            Total_Time=("Temps (min)", "sum"),
-            Total_Sets=("Set_Volume", "count"),
-            Total_Reps=("Repeticions", "sum"),
-        )
-        .reset_index()
-    )
-
-    ex_summary = ex_summary.sort_values(by="Total_Volume", ascending=False).reset_index(drop=True)
-    ex_summary["Tonatge Total"] = ex_summary["Total_Volume"].apply(lambda x: f"{x:,.0f} kg" if x > 0 else "-")
-    ex_summary["Temps Total"] = ex_summary["Total_Time"].apply(lambda x: f"{x:,.1f} min" if x > 0 else "-")
-    ex_summary["Repeticions Totals"] = ex_summary["Total_Reps"].apply(lambda x: f"{int(x):,}" if x > 0 else "-")
-
-    st.dataframe(
-        ex_summary[["Exercici", "Grup Muscular", "Sessions", "Tonatge Total", "Temps Total", "Total_Sets", "Repeticions Totals"]]
-        .rename(columns={"Sessions": "Sessions Totals", "Total_Sets": "Sèries Totals"}),
-        use_container_width=True,
-        hide_index=True,
-    )
-
+    
 # =============================================================================
-# TAB 2: PROGRESSION OVER TIME
+# TAB 2: PROGRESSION CHARTS & ANALYTICS (MOBILE OPTIMIZED)
 # =============================================================================
 with tab2:
-    df_filtered_copy = df_filtered.copy()
-    df_filtered_copy["Set_Desc"] = df_filtered_copy.apply(format_set, axis=1)
+    st.subheader("📈 Evolució de Rendiment i Volum")
+    st.caption("Gràfics optimitzats per a pantalles tàctils i mòbils.")
 
-    is_timed_ex = (df_filtered_copy["Temps (min)"] > 0) & (df_filtered_copy["Set_Volume"] == 0)
-    is_bodyweight_reps_ex = (df_filtered_copy["Pes (kg)"] == 0) & (df_filtered_copy["Temps (min)"] == 0) & (df_filtered_copy["Repeticions"] > 0)
-    is_weighted_ex = ~is_timed_ex & ~is_bodyweight_reps_ex
+    if df_filtered.empty:
+        st.info("No hi ha dades disponibles per als filtres seleccionats.")
+    else:
+        # Standardize colors and styling for mobile
+        mobile_layout_defaults = dict(
+            margin=dict(l=10, r=10, t=40, b=40),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.3,
+                xanchor="center",
+                x=0.5
+            ),
+            hovermode="x unified",
+            font=dict(size=11)
+        )
 
-    df_weighted = df_filtered_copy[is_weighted_ex]
-    df_timed = df_filtered_copy[is_timed_ex]
-    df_bw_reps = df_filtered_copy[is_bodyweight_reps_ex]
-
-    st.subheader("📈 Daily Volume Progression Over Time")
-    if not df_weighted.empty:
-        daily_vol_summary = (
-            df_weighted.groupby(["Exercici", "Grup Muscular", "Data"])
-            .apply(lambda g: pd.Series({
-                "Daily_Volume": g["Set_Volume"].sum(),
-                "Max_1RM": g["Estimated_1RM"].max(),
-                "Set_Details": "<br>".join([f"Sèrie {i+1}: {row['Set_Desc']}" for i, (_, row) in enumerate(g.iterrows())]),
-            }))
+        # -------------------------------------------------------------
+        # CHART 1: VOLUM TOTAL PER DIA / EXERCI
+        # -------------------------------------------------------------
+        daily_vol = (
+            df_filtered.groupby(["Data", "Exercici"])["Set_Volume"]
+            .sum()
             .reset_index()
         )
 
         fig_vol = px.line(
-            daily_vol_summary, x="Data", y="Daily_Volume", color="Exercici", markers=True,
-            labels={"Daily_Volume": "Total Volume (kg)", "Data": "Date"},
-            title="Interactive Daily Volume (kg)",
-            custom_data=["Exercici", "Daily_Volume", "Set_Details"],
+            daily_vol,
+            x="Data",
+            y="Set_Volume",
+            color="Exercici",
+            title="📦 Volum Total Diari (kg)",
+            markers=True,
+            labels={"Set_Volume": "Volum (kg)", "Data": "Data"}
         )
-        fig_vol.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>Data: %{x|%d/%m/%Y}<br>Volum Total: %{customdata[1]:,.0f} kg<br><br><b>Detall de Sèries:</b><br>%{customdata[2]}<extra></extra>")
-        fig_vol.update_layout(template="plotly_white", height=450, hovermode="closest")
-        st.plotly_chart(fig_vol, use_container_width=True)
-    else:
-        st.info("No volume-based exercise data available for current selection.")
+        fig_vol.update_layout(**mobile_layout_defaults)
+        fig_vol.update_xaxes(title_text="", showgrid=True)
+        fig_vol.update_yaxes(title_text="kg")
 
-    if not df_bw_reps.empty:
+        st.plotly_chart(fig_vol, use_container_width=True, config={"displayModeBar": False})
+
         st.markdown("---")
-        st.subheader("🔢 Daily Total Repetitions Progression Over Time")
-        daily_reps_summary = (
-            df_bw_reps.groupby(["Exercici", "Grup Muscular", "Data"])
-            .apply(lambda g: pd.Series({
-                "Daily_Reps": g["Repeticions"].sum(),
-                "Set_Details": "<br>".join([f"Sèrie {i+1}: {row['Set_Desc']}" for i, (_, row) in enumerate(g.iterrows())]),
-            }))
-            .reset_index()
-        )
-        fig_reps = px.line(
-            daily_reps_summary, x="Data", y="Daily_Reps", color="Exercici", markers=True,
-            labels={"Daily_Reps": "Total Repetitions", "Data": "Date"},
-            title="Interactive Daily Total Repetitions",
-            custom_data=["Exercici", "Daily_Reps", "Set_Details"],
-        )
-        fig_reps.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>Data: %{x|%d/%m/%Y}<br>Repeticions Totals: %{customdata[1]:,.0f}<br><br><b>Detall de Sèries:</b><br>%{customdata[2]}<extra></extra>")
-        fig_reps.update_layout(template="plotly_white", height=450, hovermode="closest")
-        st.plotly_chart(fig_reps, use_container_width=True)
 
-    if not df_timed.empty:
-        st.markdown("---")
-        st.subheader("⏱️ Daily Duration Progression Over Time")
-        daily_time_summary = (
-            df_timed.groupby(["Exercici", "Grup Muscular", "Data"])
-            .apply(lambda g: pd.Series({
-                "Daily_Time": g["Temps (min)"].sum(),
-                "Set_Details": "<br>".join([f"Sèrie {i+1}: {row['Set_Desc']}" for i, (_, row) in enumerate(g.iterrows())]),
-            }))
-            .reset_index()
+        # -------------------------------------------------------------
+        # CHART 2: ESTIMATED 1RM / PES MÀXIM EVOLUTION
+        # -------------------------------------------------------------
+        # Calculate e1RM using Brzycki Formula
+        df_filtered["e1RM"] = np.where(
+            df_filtered["Repeticions"] > 1,
+            df_filtered["Pes (kg)"] / (1.0278 - (0.0278 * df_filtered["Repeticions"])),
+            df_filtered["Pes (kg)"]
         )
-        fig_time = px.line(
-            daily_time_summary, x="Data", y="Daily_Time", color="Exercici", markers=True,
-            labels={"Daily_Time": "Total Duration (min)", "Data": "Date"},
-            title="Interactive Daily Duration (minutes)",
-            custom_data=["Exercici", "Daily_Time", "Set_Details"],
-        )
-        fig_time.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>Data: %{x|%d/%m/%Y}<br>Temps Total: %{customdata[1]:,.1f} min<br><br><b>Detall de Sèries:</b><br>%{customdata[2]}<extra></extra>")
-        fig_time.update_layout(template="plotly_white", height=450, hovermode="closest")
-        st.plotly_chart(fig_time, use_container_width=True)
 
-    st.markdown("---")
-    st.subheader("🔥 Estimated 1RM (Brzycki) Progression Over Time")
-    if not df_weighted.empty and "daily_vol_summary" in locals():
-        daily_1rm = daily_vol_summary[daily_vol_summary["Max_1RM"] > 0]
-        if not daily_1rm.empty:
-            fig_1rm = px.line(
-                daily_1rm, x="Data", y="Max_1RM", color="Exercici", markers=True,
-                labels={"Max_1RM": "Estimated 1RM (kg)", "Data": "Date"},
-                title="Interactive Daily Estimated 1RM (kg)",
-                custom_data=["Exercici", "Max_1RM", "Set_Details"],
+        max_metrics = (
+            df_filtered.groupby(["Data", "Exercici"])
+            .agg(
+                Max_Pes=("Pes (kg)", "max"),
+                Max_e1RM=("e1RM", "max")
             )
-            fig_1rm.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>Data: %{x|%d/%m/%Y}<br>e1RM Màxim: %{customdata[1]:,.1f} kg<br><br><b>Detall de Sèries:</b><br>%{customdata[2]}<extra></extra>")
-            fig_1rm.update_layout(template="plotly_white", height=450, hovermode="closest")
-            st.plotly_chart(fig_1rm, use_container_width=True)
-        else:
-            st.info("No weight-bearing 1RM data available for selected exercises.")
-    else:
-        st.info("No weight-bearing 1RM data available for selected exercises.")
+            .reset_index()
+        )
+
+        metric_choice = st.radio(
+            "Mètrica de Força:",
+            options=["e1RM Estimat", "Pes Màxim Aixecat"],
+            horizontal=True,
+            key="metric_choice_tab2"
+        )
+
+        y_col = "Max_e1RM" if metric_choice == "e1RM Estimat" else "Max_Pes"
+        y_label = "e1RM Estimat (kg)" if metric_choice == "e1RM Estimat" else "Pes Màxim (kg)"
+
+        fig_strength = px.line(
+            max_metrics,
+            x="Data",
+            y=y_col,
+            color="Exercici",
+            title=f"💪 Evolució de Força ({y_label})",
+            markers=True,
+            labels={y_col: y_label, "Data": "Data"}
+        )
+        fig_strength.update_layout(**mobile_layout_defaults)
+        fig_strength.update_xaxes(title_text="", showgrid=True)
+        fig_strength.update_yaxes(title_text="kg")
+
+        st.plotly_chart(fig_strength, use_container_width=True, config={"displayModeBar": False})
+
+        st.markdown("---")
+
+        # -------------------------------------------------------------
+        # CHART 3: TOTAL SETS / REPS BY MUSCLE GROUP
+        # -------------------------------------------------------------
+        muscle_summary = (
+            df_filtered.groupby("Grup Muscular")
+            .agg(
+                Total_Series=("Set_Volume", "count"),
+                Total_Reps=("Repeticions", "sum")
+            )
+            .reset_index()
+        )
+
+        fig_muscle = px.bar(
+            muscle_summary,
+            x="Grup Muscular",
+            y="Total_Series",
+            text="Total_Series",
+            title="📊 Total de Sèries per Grup Muscular",
+            labels={"Total_Series": "Nº de Sèries", "Grup Muscular": "Grup"}
+        )
+        fig_muscle.update_traces(textposition="outside")
+        fig_muscle.update_layout(
+            margin=dict(l=10, r=10, t=40, b=40),
+            font=dict(size=11)
+        )
+        fig_muscle.update_xaxes(title_text="")
+        fig_muscle.update_yaxes(title_text="Sèries")
+
+        st.plotly_chart(fig_muscle, use_container_width=True, config={"displayModeBar": False})
 
 # =============================================================================
 # TAB 3: CALENDAR VIEW, MUSCLE DISTRIBUTION & RAW DATA
