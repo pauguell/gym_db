@@ -94,13 +94,13 @@ def delete_row_from_supabase(row_id):
 
 
 def build_github_heatmap(df):
-    """Generates a GitHub-style workout consistency heatmap using Plotly."""
+    """Generates a Monthly Workout Consistency Heatmap (Days 1-31 on X-axis, Months on Y-axis)."""
     if df.empty:
         return None
 
-    # Determine date range (past 52 weeks up to latest log or today)
+    # Determine date range (past 12 full calendar months up to latest log)
     max_date = df["Data"].max().date()
-    min_date = max_date - datetime.timedelta(days=364)
+    min_date = (max_date - datetime.timedelta(days=365)).replace(day=1)
 
     # Generate full date backbone
     all_dates = pd.date_range(start=min_date, end=max_date, freq="D")
@@ -124,17 +124,24 @@ def build_github_heatmap(df):
     merged["Total_Volume"] = merged["Total_Volume"].fillna(0)
     merged["Exercises"] = merged["Exercises"].fillna("Descans")
 
-    # Map grid positions (Week Number vs Day of Week)
-    merged["Weekday"] = merged["Data"].dt.weekday  # 0=Mon, 6=Sun
-    merged["WeekIdx"] = (merged["Data"] - merged["Data"].min()).dt.days // 7
+    # Extract Month-Year label for Y-axis and Day of Month (1-31) for X-axis
+    merged["Month_Label"] = merged["Data"].dt.strftime("%b %Y")  # e.g., "Jan 2026"
+    merged["Month_Sort"] = merged["Data"].dt.to_period("M")
+    merged["Day_Of_Month"] = merged["Data"].dt.day  # 1 to 31
 
-    days_names = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte", "Diumenge"]
+    # Order months chronologically
+    unique_months = (
+        merged[["Month_Label", "Month_Sort"]]
+        .drop_duplicates()
+        .sort_values("Month_Sort")["Month_Label"]
+        .tolist()
+    )
 
-    # Build matrix for Plotly Heatmap
-    pivot_sets = merged.pivot(index="Weekday", columns="WeekIdx", values="Total_Sets").fillna(0)
-    pivot_dates = merged.pivot(index="Weekday", columns="WeekIdx", values="Data_Dt")
-    pivot_vol = merged.pivot(index="Weekday", columns="WeekIdx", values="Total_Volume").fillna(0)
-    pivot_ex = merged.pivot(index="Weekday", columns="WeekIdx", values="Exercises").fillna("Descans")
+    # Build matrix for Plotly Heatmap (Days 1..31 vs Months)
+    pivot_sets = merged.pivot(index="Month_Label", columns="Day_Of_Month", values="Total_Sets").reindex(unique_months)
+    pivot_dates = merged.pivot(index="Month_Label", columns="Day_Of_Month", values="Data_Dt").reindex(unique_months)
+    pivot_vol = merged.pivot(index="Month_Label", columns="Day_Of_Month", values="Total_Volume").reindex(unique_months)
+    pivot_ex = merged.pivot(index="Month_Label", columns="Day_Of_Month", values="Exercises").reindex(unique_months)
 
     # Text hover matrix
     hover_text = []
@@ -146,34 +153,43 @@ def build_github_heatmap(df):
             raw_vol = pivot_vol.iloc[r, c]
             raw_ex = pivot_ex.iloc[r, c]
 
-            d_str = raw_date.strftime("%d/%m/%Y") if pd.notnull(raw_date) else ""
-            sets_val = int(raw_sets) if pd.notnull(raw_sets) else 0
-            vol_val = raw_vol if pd.notnull(raw_vol) else 0.0
-            ex_val = raw_ex if pd.notnull(raw_ex) else "Descans"
+            if pd.notnull(raw_date):
+                d_str = raw_date.strftime("%d/%m/%Y")
+                sets_val = int(raw_sets) if pd.notnull(raw_sets) else 0
+                vol_val = raw_vol if pd.notnull(raw_vol) else 0.0
+                ex_val = raw_ex if pd.notnull(raw_ex) else "Descans"
 
-            if sets_val > 0:
-                txt = f"<b>📅 {d_str}</b><br>🏋️ Sèries: {sets_val}<br>📦 Volum: {vol_val:,.0f} kg<br>💪 Exercicis: {ex_val}"
-            elif d_str:
-                txt = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
+                if sets_val > 0:
+                    txt = f"<b>📅 {d_str}</b><br>🏋️ Sèries: {sets_val}<br>📦 Volum: {vol_val:,.0f} kg<br>💪 Exercicis: {ex_val}"
+                else:
+                    txt = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
             else:
-                txt = ""
+                txt = ""  # Days that don't exist in shorter months (e.g., Feb 30/31)
+
             row_hover.append(txt)
         hover_text.append(row_hover)
 
-    # Custom green colorscale (GitHub-style)
+    # Fill invalid calendar days with NaN so they remain visually empty
+    z_matrix = pivot_sets.values.astype(float)
+    for r in range(len(pivot_dates)):
+        for c in range(len(pivot_dates.columns)):
+            if pd.isnull(pivot_dates.iloc[r, c]):
+                z_matrix[r, c] = np.nan
+
+    # Custom Color Scale: Gray for rest (0), Blue -> Purple -> Red gradient for training
     colorscale = [
-        [0.0, "#161b22"],    # Rest / empty day (dark)
-        [0.01, "#0e4429"],   # Low activity
-        [0.35, "#006d32"],   # Moderate
-        [0.70, "#26a641"],   # High
-        [1.00, "#39d353"],   # Intense
+        [0.00, "#2d3748"],   # Rest / empty day (Dark Gray)
+        [0.01, "#3b82f6"],   # Low activity (Bright Blue)
+        [0.35, "#8b5cf6"],   # Moderate (Purple)
+        [0.70, "#ec4899"],   # High (Pink / Light Red)
+        [1.00, "#ef4444"],   # Intense (Solid Red)
     ]
 
     fig = go.Figure(
         data=go.Heatmap(
-            z=pivot_sets.values,
-            x=pivot_sets.columns,
-            y=[days_names[i] for i in pivot_sets.index],
+            z=z_matrix,
+            x=list(range(1, 32)),
+            y=pivot_sets.index,
             text=hover_text,
             hoverinfo="text",
             colorscale=colorscale,
@@ -184,11 +200,18 @@ def build_github_heatmap(df):
     )
 
     fig.update_layout(
-        title="🔥 Calendari de Consistència (Últim Any)",
-        height=220,
-        margin=dict(l=60, r=10, t=40, b=20),
+        title="🔥 Calendari de Consistència Mensual",
+        height=320,
+        margin=dict(l=70, r=10, t=40, b=30),
         yaxis=dict(autorange="reversed", showgrid=False, zeroline=False),
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        xaxis=dict(
+            title="Dia del Mes",
+            tickmode="linear",
+            tick0=1,
+            dtick=1,
+            showgrid=False,
+            zeroline=False,
+        ),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(size=11),
