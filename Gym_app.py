@@ -187,7 +187,7 @@ def build_github_heatmap(df):
         title="🔥 Calendari de Consistència (Últim Any)",
         height=220,
         margin=dict(l=60, r=10, t=40, b=20),
-        yaxis=dict(autorange="reverse", showgrid=False, zeroline=False),
+        yaxis=dict(autorange="reversed", showgrid=False, zeroline=False),
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
