@@ -276,7 +276,7 @@ df = load_data()
 # =============================================================================
 # MAIN HEADER
 # =============================================================================
-st.title("🏋️‍♂️ Menú de Rendiment de Gimnàs")
+st.title("🏋️‍♂️ Pau Güell's Gym Hub")
 st.markdown(
     "Control de volum de sèries, estimació d'1RM, durada i històric de rècards visuals."
 )
