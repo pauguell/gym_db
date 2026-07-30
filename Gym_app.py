@@ -177,34 +177,74 @@ with st.sidebar.expander("➕ **Log New Set to Cloud**", expanded=True):
                 except Exception as e:
                     st.error(f"Error saving set: {e}")
 
-# --- 3B. DELETE MISTAKEN ENTRIES ---
+# --- 3B. DELETE MISTAKEN ENTRIES (Filtered for any entry) ---
 with st.sidebar.expander("🗑️ **Delete / Manage Logs**", expanded=False):
-    st.caption("Select a recent entry to delete if you made a mistake.")
+    st.caption("Filter and select any historical entry to delete.")
     
-    recent_df = df.sort_values(by="Data", ascending=False).head(50).copy()
-    
-    if not recent_df.empty:
-        recent_df["Display_Label"] = (
-            recent_df["Data"].dt.strftime("%d/%m/%Y") + " - " + 
-            recent_df["Exercici"] + " (" + 
-            recent_df["Pes (kg)"].astype(str) + "kg x " + 
-            recent_df["Repeticions"].astype(str) + "r)"
+    if not df.empty:
+        # 1. Date filter for deletion lookup
+        del_min_date = df["Data"].min().date()
+        del_max_date = df["Data"].max().date()
+        
+        del_date_range = st.date_input(
+            "Filter by Date Range",
+            value=(del_min_date, del_max_date),
+            min_value=del_min_date,
+            max_value=del_max_date,
+            key="del_date_filter"
         )
         
-        row_to_delete = st.selectbox(
-            "Select entry to remove", 
-            options=recent_df.index, 
-            format_func=lambda x: recent_df.loc[x, "Display_Label"]
+        if isinstance(del_date_range, tuple) and len(del_date_range) == 2:
+            del_start_date, del_end_date = del_date_range
+        elif isinstance(del_date_range, tuple) and len(del_date_range) == 1:
+            del_start_date = del_end_date = del_date_range[0]
+        else:
+            del_start_date = del_end_date = del_date_range
+
+        # 2. Exercise filter for deletion lookup
+        available_del_ex = sorted(df["Exercici"].unique().tolist())
+        selected_del_ex = st.selectbox(
+            "Filter by Exercise",
+            options=["All Exercises"] + available_del_ex,
+            key="del_ex_filter"
         )
         
-        if st.button("❌ Delete Selected Entry", type="secondary"):
-            target_id = df.loc[row_to_delete, "id"]
-            try:
-                delete_row_from_supabase(target_id)
-                st.success("Entry deleted successfully!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error deleting entry: {e}")
+        # Apply filters to find the target rows
+        del_filtered_df = df[
+            (df["Data"].dt.date >= del_start_date) & 
+            (df["Data"].dt.date <= del_end_date)
+        ].copy()
+        
+        if selected_del_ex != "All Exercises":
+            del_filtered_df = del_filtered_df[del_filtered_df["Exercici"] == selected_del_ex]
+        
+        del_filtered_df = del_filtered_df.sort_values(by="Data", ascending=False)
+        
+        if not del_filtered_df.empty:
+            del_filtered_df["Display_Label"] = (
+                del_filtered_df["Data"].dt.strftime("%d/%m/%Y") + " - " + 
+                del_filtered_df["Exercici"] + " (" + 
+                del_filtered_df["Pes (kg)"].astype(str) + "kg x " + 
+                del_filtered_df["Repeticions"].astype(str) + "r)"
+            )
+            
+            row_to_delete = st.selectbox(
+                "Select entry to remove", 
+                options=del_filtered_df.index, 
+                format_func=lambda x: del_filtered_df.loc[x, "Display_Label"],
+                key="del_row_select"
+            )
+            
+            if st.button("❌ Delete Selected Entry", type="secondary", key="del_btn"):
+                target_id = df.loc[row_to_delete, "id"]
+                try:
+                    delete_row_from_supabase(target_id)
+                    st.success("Entry deleted successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error deleting entry: {e}")
+        else:
+            st.info("No logs match the selected filters.")
     else:
         st.info("No logs available to delete.")
 
