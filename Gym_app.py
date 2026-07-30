@@ -94,10 +94,7 @@ def delete_row_from_supabase(row_id):
 
 
 def build_github_heatmap(df, selected_period):
-    """Generates a Monthly Workout Consistency Heatmap in calendar format.
-    
-    Includes date metadata attached to each cell for click-event selection.
-    """
+    """Generates a Monthly Workout Consistency Heatmap in calendar format with date metadata."""
     if df.empty or not selected_period:
         return None
 
@@ -178,16 +175,16 @@ def build_github_heatmap(df, selected_period):
         else:
             hover_text[w_idx, d_idx] = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
 
-    # Rainbow Color Scale (Light Slate Gray for rest)
+    # Rainbow Color Scale
     colorscale = [
         [0.00, "#e2e8f0"],   # Rest / empty day (Lighter Slate Gray)
-        [0.01, "#6366f1"],   # Indigo (Low activity)
+        [0.01, "#6366f1"],   # Indigo
         [0.20, "#3b82f6"],   # Blue
         [0.40, "#06b6d4"],   # Cyan
         [0.60, "#10b981"],   # Green
         [0.75, "#eab308"],   # Yellow
         [0.90, "#f97316"],   # Orange
-        [1.00, "#ef4444"],   # Red (Highest all-time intensity)
+        [1.00, "#ef4444"],   # Red
     ]
 
     fig = go.Figure(
@@ -196,7 +193,7 @@ def build_github_heatmap(df, selected_period):
             x=days_names,
             y=week_labels,
             text=cell_text,
-            customdata=date_matrix,     # Stores ISO date string inside each cell
+            customdata=date_matrix,
             texttemplate="%{text}",
             textfont=dict(size=13, color="#0f172a", family="Arial Black"),
             hovertext=hover_text,
@@ -421,11 +418,11 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
     if df.empty:
         st.info("No hi ha entrenaments registrats a la base de dades.")
     else:
-        # Extract available Month-Year periods from dataset
+        # 1. Extract available Month-Year periods from dataset
         df["YearMonth"] = df["Data"].dt.to_period("M")
         available_months = sorted(df["YearMonth"].unique(), reverse=True)
 
-        # Month Selector Dropdown
+        # 2. Month Selector Dropdown
         selected_month_period = st.selectbox(
             "📆 Selecciona el Mes per al Calendari:",
             options=available_months,
@@ -433,14 +430,19 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
             key="heatmap_month_picker"
         )
 
-        # Build interactive calendar heatmap
-        heatmap_fig = build_github_heatmap(df, selected_month_period)
-        
-        # Available workout dates for the selected month
-        month_dates = df[df["YearMonth"] == selected_month_period]["Data"].dt.date.unique()
-        month_dates = sorted(month_dates, reverse=True)
+        # 3. All calendar dates for the selected month (includes rest days)
+        start_date = selected_month_period.to_timestamp().date()
+        if start_date.month == 12:
+            end_date = datetime.date(start_date.year, 12, 31)
+        else:
+            end_date = datetime.date(start_date.year, start_date.month + 1, 1) - datetime.timedelta(days=1)
+            
+        all_month_dates = sorted(pd.date_range(start_date, end_date).date, reverse=True)
 
-        # Render Plotly Chart with selection event enabled
+        # 4. Build interactive calendar heatmap
+        heatmap_fig = build_github_heatmap(df, selected_month_period)
+
+        # 5. Render Plotly Chart with selection listener
         selected_event = None
         if heatmap_fig:
             selected_event = st.plotly_chart(
@@ -452,24 +454,38 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                 key="calendar_heatmap_chart"
             )
 
-        # Process click selection from Plotly Chart
-        if selected_event and "selection" in selected_event and selected_event["selection"]["points"]:
+        # 6. Extract clicked date robustly from Plotly event dict
+        if selected_event and "selection" in selected_event and selected_event["selection"].get("points"):
             point = selected_event["selection"]["points"][0]
-            if "customdata" in point and point["customdata"]:
-                clicked_date_str = point["customdata"]
+            raw_cd = point.get("customdata")
+            
+            # Handle string vs single-element list returns
+            if isinstance(raw_cd, list) and len(raw_cd) > 0:
+                clicked_date_str = raw_cd[0]
+            else:
+                clicked_date_str = str(raw_cd) if raw_cd else None
+
+            if clicked_date_str:
                 try:
                     clicked_date = datetime.datetime.strptime(clicked_date_str, "%Y-%m-%d").date()
-                    if clicked_date in month_dates:
-                        st.session_state["workout_day_picker"] = clicked_date
+                    if clicked_date in all_month_dates:
+                        # Update session state & trigger immediate UI update
+                        if st.session_state.get("workout_day_picker") != clicked_date:
+                            st.session_state["workout_day_picker"] = clicked_date
+                            st.rerun()
                 except ValueError:
                     pass
 
         st.markdown("---")
 
-        # Date Picker Dropdown (automatically syncs with calendar clicks)
+        # Ensure default date exists in state
+        if "workout_day_picker" not in st.session_state or st.session_state["workout_day_picker"] not in all_month_dates:
+            st.session_state["workout_day_picker"] = all_month_dates[0]
+
+        # 7. Date Picker Dropdown (synced automatically with calendar clicks)
         selected_date = st.selectbox(
             "📅 Selecciona la Data de l'Entrenament (o fes clic al calendari):",
-            options=month_dates,
+            options=all_month_dates,
             format_func=lambda d: d.strftime("%d/%m/%Y"),
             key="workout_day_picker"
         )
@@ -477,7 +493,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
         df_day = df[pd.to_datetime(df["Data"]).dt.date == selected_date].copy()
 
         if df_day.empty:
-            st.warning(f"No s'han trobat exercicis per al dia {selected_date.strftime('%d/%m/%Y')}.")
+            st.info(f"😴 **{selected_date.strftime('%d/%m/%Y')}** és un dia de descans (sense entrenaments registrats).")
         else:
             def format_workout_set(row):
                 p = row["Pes (kg)"]
