@@ -241,17 +241,16 @@ with st.sidebar.expander("🗑️ **Delete / Manage Logs**", expanded=False):
         st.info("No logs available to delete.")
 
 # -----------------------------------------------------------------------------
-# GLOBAL FILTERS (EXPANDER WITH SESSION STATE PERSISTENCE)
+# GLOBAL FILTERS (STABLE SESSION STATE & GRACEFUL EMPTY HANDLING)
 # -----------------------------------------------------------------------------
 with st.sidebar.expander("🔍 Filters", expanded=True):
     min_date = df["Data"].min().date()
     max_date = df["Data"].max().date()
 
-    # Initialize date range session state if not present or out of bounds
+    # 1. Date Range Persistence
     if "global_date_range" not in st.session_state:
         st.session_state["global_date_range"] = (min_date, max_date)
     else:
-        # Ensure cached bounds don't crash if data changes
         curr_start, curr_end = st.session_state["global_date_range"]
         st.session_state["global_date_range"] = (
             max(min_date, min(curr_start, max_date)),
@@ -273,37 +272,42 @@ with st.sidebar.expander("🔍 Filters", expanded=True):
     else:
         start_date = end_date = date_range
 
+    # 2. Muscle Group Filter Persistence & Empty Handling
     all_mg = sorted(df["Grup Muscular"].unique().tolist())
     
-    # Initialize muscle groups session state
     if "global_mg" not in st.session_state:
         st.session_state["global_mg"] = all_mg
-    else:
-        # Keep only valid muscle groups that still exist in the dataframe
-        st.session_state["global_mg"] = [mg for mg in st.session_state["global_mg"] if mg in all_mg]
-        if not st.session_state["global_mg"]:
-            st.session_state["global_mg"] = all_mg
 
     selected_mg = st.multiselect(
         "Muscle Groups", options=all_mg, key="global_mg"
     )
+    
+    # If user clicks 'X' to clear all muscle groups, fall back to all of them so it doesn't break
+    if not selected_mg:
+        selected_mg = all_mg
 
+    # 3. Exercise Filter Persistence & Empty Handling
     available_exercises = sorted(
         df[df["Grup Muscular"].isin(selected_mg)]["Exercici"].unique().tolist()
     )
     
-    # Initialize exercises session state
     if "global_exercises" not in st.session_state:
         st.session_state["global_exercises"] = available_exercises
     else:
-        # Keep only valid exercises available under current muscle groups
-        st.session_state["global_exercises"] = [ex for ex in st.session_state["global_exercises"] if ex in available_exercises]
+        # Keep valid ones that exist in the current muscle group selection
+        st.session_state["global_exercises"] = [
+            ex for ex in st.session_state["global_exercises"] if ex in available_exercises
+        ]
         if not st.session_state["global_exercises"]:
             st.session_state["global_exercises"] = available_exercises
 
     selected_exercises = st.multiselect(
         "Exercises", options=available_exercises, key="global_exercises"
     )
+    
+    # If user clicks 'X' to clear all exercises, fall back to all available ones
+    if not selected_exercises:
+        selected_exercises = available_exercises
 
 df_filtered = df[
     (df["Data"].dt.date >= start_date)
