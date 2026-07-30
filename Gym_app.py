@@ -17,8 +17,8 @@ st.set_page_config(
 # -----------------------------------------------------------------------------
 @st.cache_resource
 def init_supabase():
-    url = st.secrets["https://gftvqztvzezjfuzhldie.supabase.co"]
-    key = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdHZxenR2emV6amZ1emhsZGllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMzQ4NDcsImV4cCI6MjEwMDkxMDg0N30.aoEhmE23Jv61wpoH5V1bREAh5fm9I_lYizkQ2OCuOZs"]
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)
 
 supabase = init_supabase()
