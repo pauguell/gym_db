@@ -448,7 +448,10 @@ with tab1:
         latest_dates,
         on=["Exercici", "Data"],
         how="inner"
-    )
+    ).copy()
+
+    # Ensure Set_Desc exists on this subset
+    last_workout_sets["Set_Desc"] = last_workout_sets.apply(format_set, axis=1)
 
     last_workout_summary = (
         last_workout_sets.groupby(["Exercici", "Grup Muscular", "Data"])
@@ -461,7 +464,7 @@ with tab1:
 
     last_workout_table_df = last_workout_summary[["Exercici", "Grup Muscular", "Data de l'Últim Entrenament", "Detalls"]]
     st.markdown(last_workout_table_df.to_html(escape=False, index=False), unsafe_allow_html=True)
-
+    
     # -------------------------------------------------------------
     # EXISTING TABLE: TOTALS PER EXERCISE
     # -------------------------------------------------------------
