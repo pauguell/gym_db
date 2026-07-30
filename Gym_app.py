@@ -418,30 +418,31 @@ with tab1:
         ),
     )
 
-    max_dates = daily_totals.loc[
-        daily_totals.groupby("Exercici")["Max_Metric_Value"].idxmax()
-    ]
+    max_idx = daily_totals.groupby("Exercici")["Max_Metric_Value"].idxmax()
+    max_dates = daily_totals.loc[max_idx]
 
     max_day_sets = pd.merge(
         df_tab1,
-        max_dates[["Exercici", "Data", "Max_Metric_Value", "Ex_Type"]],
+        max_dates[["Exercici", "Data"]],
         on=["Exercici", "Data"],
         how="inner",
     )
-    max_day_sets = max_day_sets.sort_values(by="Max_Metric_Value", ascending=False)
+    max_day_sets = max_day_sets.sort_values(by="Data", ascending=False)
 
     for ex in max_day_sets["Exercici"].unique():
         ex_data = max_day_sets[max_day_sets["Exercici"] == ex]
         mg = ex_data["Grup Muscular"].iloc[0]
         date_str = ex_data["Data"].iloc[0].strftime("%d/%m/%Y")
         ex_type = ex_data["Ex_Type"].iloc[0]
-        val = ex_data["Max_Metric_Value"].iloc[0]
-
+        
         if ex_type == "Timed":
+            val = ex_data["Temps (min)"].sum()
             val_str = f"{int(val)} min" if val == int(val) else f"{val:.1f} min"
         elif ex_type == "BW_Reps":
+            val = ex_data["Repeticions"].sum()
             val_str = f"{int(val):,} reps"
         else:
+            val = ex_data["Set_Volume"].sum()
             val_str = f"{val:,.0f} kg Vol"
 
         with st.expander(f"⭐ **{ex}** ({mg}) — 🏆 {val_str} ({date_str})"):
