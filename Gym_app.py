@@ -96,9 +96,7 @@ def delete_row_from_supabase(row_id):
 def build_github_heatmap(df, selected_period):
     """Generates a Monthly Workout Consistency Heatmap in calendar format.
     
-    - Columns: Dilluns - Diumenge (Mon-Sun)
-    - Rows: Week 1 - Week N
-    - Color scale is relative to the ALL-TIME database min (0) and max sets.
+    Includes date metadata attached to each cell for click-event selection.
     """
     if df.empty or not selected_period:
         return None
@@ -154,6 +152,7 @@ def build_github_heatmap(df, selected_period):
     z_matrix = np.full((max_weeks, 7), np.nan)
     cell_text = np.full((max_weeks, 7), "", dtype=object)
     hover_text = np.full((max_weeks, 7), "", dtype=object)
+    date_matrix = np.full((max_weeks, 7), "", dtype=object)
 
     for _, row in merged.iterrows():
         w_idx = int(row["MonthWeekIdx"])
@@ -163,9 +162,11 @@ def build_github_heatmap(df, selected_period):
         vol_val = row["Total_Volume"]
         ex_val = row["Exercises"]
         d_str = row["Data_Dt"].strftime("%d/%m/%Y")
+        iso_str = row["Data_Dt"].strftime("%Y-%m-%d")
 
         z_matrix[w_idx, d_idx] = sets_val
         cell_text[w_idx, d_idx] = str(day_num)
+        date_matrix[w_idx, d_idx] = iso_str
 
         if sets_val > 0:
             hover_text[w_idx, d_idx] = (
@@ -195,13 +196,14 @@ def build_github_heatmap(df, selected_period):
             x=days_names,
             y=week_labels,
             text=cell_text,
+            customdata=date_matrix,     # Stores ISO date string inside each cell
             texttemplate="%{text}",
             textfont=dict(size=13, color="#0f172a", family="Arial Black"),
             hovertext=hover_text,
             hoverinfo="text",
             colorscale=colorscale,
-            zmin=0,                      # 0 sets = Light Slate Gray
-            zmax=max_all_time_sets,      # Locked to all-time DB maximum sets
+            zmin=0,
+            zmax=max_all_time_sets,
             showscale=False,
             xgap=5,
             ygap=5,
@@ -411,10 +413,10 @@ with st.expander("🛠️ **Section 1: Data Management (Log & Delete)**", expand
                 st.info("No logs available to delete.")
 
 # =============================================================================
-# SECTION 2: WORKOUT VISUALIZATION
+# SECTION 2: WORKOUT VISUALIZATION (Interactive Calendar + Click-to-View)
 # =============================================================================
 with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", expanded=False):
-    st.caption("Consulta el mapa de consistència mensual en format calendari i selecciona un dia per veure les sèries.")
+    st.caption("Fes clic en qualsevol dia del calendari per veure el desglossament de les sèries a sota.")
 
     if df.empty:
         st.info("No hi ha entrenaments registrats a la base de dades.")
@@ -431,19 +433,42 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
             key="heatmap_month_picker"
         )
 
-        # Display Calendar Heatmap
+        # Build interactive calendar heatmap
         heatmap_fig = build_github_heatmap(df, selected_month_period)
-        if heatmap_fig:
-            st.plotly_chart(heatmap_fig, use_container_width=True, config={"displayModeBar": False})
-
-        st.markdown("---")
-
-        # Filter available workout dates for the selected month
+        
+        # Available workout dates for the selected month
         month_dates = df[df["YearMonth"] == selected_month_period]["Data"].dt.date.unique()
         month_dates = sorted(month_dates, reverse=True)
 
+        # Render Plotly Chart with selection event enabled
+        selected_event = None
+        if heatmap_fig:
+            selected_event = st.plotly_chart(
+                heatmap_fig,
+                use_container_width=True,
+                config={"displayModeBar": False},
+                on_select="rerun",
+                selection_mode="points",
+                key="calendar_heatmap_chart"
+            )
+
+        # Process click selection from Plotly Chart
+        if selected_event and "selection" in selected_event and selected_event["selection"]["points"]:
+            point = selected_event["selection"]["points"][0]
+            if "customdata" in point and point["customdata"]:
+                clicked_date_str = point["customdata"]
+                try:
+                    clicked_date = datetime.datetime.strptime(clicked_date_str, "%Y-%m-%d").date()
+                    if clicked_date in month_dates:
+                        st.session_state["workout_day_picker"] = clicked_date
+                except ValueError:
+                    pass
+
+        st.markdown("---")
+
+        # Date Picker Dropdown (automatically syncs with calendar clicks)
         selected_date = st.selectbox(
-            "📅 Selecciona la Data de l'Entrenament:",
+            "📅 Selecciona la Data de l'Entrenament (o fes clic al calendari):",
             options=month_dates,
             format_func=lambda d: d.strftime("%d/%m/%Y"),
             key="workout_day_picker"
@@ -478,7 +503,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
             mcol2.metric("🔢 Total Sèries", total_sets)
             mcol3.metric("📦 Volum Total", f"{total_vol:,.0f} kg")
 
-            st.markdown("### 🏋️ Exercicis Realitzats")
+            st.markdown(f"### 🏋️ Exercicis Realitzats ({selected_date.strftime('%d/%m/%Y')})")
 
             for exercici, ex_group in df_day.groupby("Exercici"):
                 grup_muscular = ex_group["Grup Muscular"].iloc[0]
