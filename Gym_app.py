@@ -177,12 +177,11 @@ with st.sidebar.expander("➕ **Log New Set to Cloud**", expanded=True):
                 except Exception as e:
                     st.error(f"Error saving set: {e}")
 
-# --- 3B. DELETE MISTAKEN ENTRIES ---
+# --- 3B. DELETE MISTAKEN ENTRIES (Single Date & Exercise Filter) ---
 with st.sidebar.expander("🗑️ **Delete / Manage Logs**", expanded=False):
     st.caption("Filter and select any historical entry to delete.")
     
     if not df.empty:
-        # 1. Single date filter for deletion lookup
         min_date_val = df["Data"].min().date()
         max_date_val = df["Data"].max().date()
         
@@ -194,7 +193,6 @@ with st.sidebar.expander("🗑️ **Delete / Manage Logs**", expanded=False):
             key="del_single_date_filter"
         )
         
-        # 2. Exercise filter for deletion lookup
         available_del_ex = sorted(df["Exercici"].unique().tolist())
         selected_del_ex = st.selectbox(
             "Filter by Exercise",
@@ -202,7 +200,6 @@ with st.sidebar.expander("🗑️ **Delete / Manage Logs**", expanded=False):
             key="del_ex_filter"
         )
         
-        # Apply filters to find the target rows for the selected single date
         del_filtered_df = df[
             df["Data"].dt.date == selected_del_date
         ].copy()
@@ -241,28 +238,17 @@ with st.sidebar.expander("🗑️ **Delete / Manage Logs**", expanded=False):
         st.info("No logs available to delete.")
 
 # -----------------------------------------------------------------------------
-# GLOBAL FILTERS (STREAMLIT NATIVE SESSION STATE PERSISTENCE)
+# GLOBAL FILTERS (ORIGINAL VERSION)
 # -----------------------------------------------------------------------------
 with st.sidebar.expander("🔍 Filters", expanded=True):
     min_date = df["Data"].min().date()
     max_date = df["Data"].max().date()
 
-    # 1. Date Range Persistence
-    if "global_date_range" not in st.session_state:
-        st.session_state["global_date_range"] = (min_date, max_date)
-    else:
-        curr_start, curr_end = st.session_state["global_date_range"]
-        st.session_state["global_date_range"] = (
-            max(min_date, min(curr_start, max_date)),
-            min(max_date, max(curr_end, min_date))
-        )
-
     date_range = st.date_input(
         "Select Date Range",
-        value=st.session_state["global_date_range"],
+        value=(min_date, max_date),
         min_value=min_date,
         max_value=max_date,
-        key="global_date_range"
     )
 
     if isinstance(date_range, tuple) and len(date_range) == 2:
@@ -272,41 +258,16 @@ with st.sidebar.expander("🔍 Filters", expanded=True):
     else:
         start_date = end_date = date_range
 
-    # 2. Muscle Group Filter Persistence (No 'default' argument to prevent state clash)
     all_mg = sorted(df["Grup Muscular"].unique().tolist())
-    
-    if "global_mg" not in st.session_state:
-        st.session_state["global_mg"] = all_mg
-    else:
-        # Keep only valid muscle groups that still exist in the database
-        st.session_state["global_mg"] = [mg for mg in st.session_state["global_mg"] if mg in all_mg]
-        if not st.session_state["global_mg"]:
-            st.session_state["global_mg"] = all_mg
-
     selected_mg = st.multiselect(
-        "Muscle Groups", 
-        options=all_mg, 
-        key="global_mg"
+        "Muscle Groups", options=all_mg, default=all_mg
     )
 
-    # 3. Exercise Filter Persistence (No 'default' argument to prevent state clash)
     available_exercises = sorted(
         df[df["Grup Muscular"].isin(selected_mg)]["Exercici"].unique().tolist()
     )
-    
-    if "global_exercises" not in st.session_state:
-        st.session_state["global_exercises"] = available_exercises
-    else:
-        st.session_state["global_exercises"] = [
-            ex for ex in st.session_state["global_exercises"] if ex in available_exercises
-        ]
-        if not st.session_state["global_exercises"]:
-            st.session_state["global_exercises"] = available_exercises
-
     selected_exercises = st.multiselect(
-        "Exercises", 
-        options=available_exercises, 
-        key="global_exercises"
+        "Exercises", options=available_exercises, default=available_exercises
     )
 
 df_filtered = df[
