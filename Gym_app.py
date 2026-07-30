@@ -114,163 +114,163 @@ with st.expander("🛠️ **Section 1: Data Management (Log & Delete)**", expand
 
     # --- 1A. LOG NEW SET FORM ---
     with manage_col1:
-        st.subheader("➕ Log New Set")
-        if not df.empty:
-            existing_mg = sorted(df["Grup Muscular"].unique())
-        else:
-            existing_mg = ["Chest", "Back", "Legs", "Shoulders", "Arms", "Core"]
-
-        selected_log_mg = st.selectbox(
-            "Muscle Group", options=existing_mg, key="form_mg_select"
-        )
-
-        if not df.empty:
-            existing_ex = sorted(
-                df[df["Grup Muscular"] == selected_log_mg]["Exercici"].unique()
-            )
-        else:
-            existing_ex = []
-
-        with st.form("log_set_form", clear_on_submit=False):
-            log_date = st.date_input("Date", value=pd.Timestamp.now().date(), key="form_date")
-
-            log_ex_option = st.selectbox(
-                "Exercise", options=existing_ex + ["+ Add New Exercise..."], key="form_ex_select"
-            )
-
-            if log_ex_option == "+ Add New Exercise...":
-                log_ex = st.text_input("Enter New Exercise Name", key="form_new_ex_input")
+        with st.expander("➕ **Log New Set to Cloud**", expanded=True):
+            if not df.empty:
+                existing_mg = sorted(df["Grup Muscular"].unique())
             else:
-                log_ex = log_ex_option
+                existing_mg = ["Chest", "Back", "Legs", "Shoulders", "Arms", "Core"]
 
-            # Quick-fill helper button logic
-            if not df.empty and log_ex_option != "+ Add New Exercise..." and log_ex_option:
-                last_entry_df = df[df["Exercici"] == log_ex_option].sort_values(by="Data", ascending=False)
-                if not last_entry_df.empty:
-                    last_row = last_entry_df.iloc[0]
-                    default_w = float(last_row["Pes (kg)"])
-                    default_r = int(last_row["Repeticions"])
-                    default_t = float(last_row["Temps (min)"])
-                    st.caption(f"💡 Last logged: {last_row['Data'].strftime('%d/%m/%Y')} → {default_w}kg x {default_r} reps")
-                    
-                    if st.form_submit_button("⚡ Copy Last Set Values"):
-                        st.session_state["prefill_weight"] = default_w
-                        st.session_state["prefill_reps"] = default_r
-                        st.session_state["prefill_time"] = default_t
-                        st.rerun()
+            selected_log_mg = st.selectbox(
+                "Muscle Group", options=existing_mg, key="form_mg_select"
+            )
 
-            # Fallback values from session state if copied
-            def_w = st.session_state.get("prefill_weight", None)
-            def_r = st.session_state.get("prefill_reps", None)
-            def_t = st.session_state.get("prefill_time", None)
+            if not df.empty:
+                existing_ex = sorted(
+                    df[df["Grup Muscular"] == selected_log_mg]["Exercici"].unique()
+                )
+            else:
+                existing_ex = []
 
-            col_weight, col_reps = st.columns(2)
-            with col_weight:
-                log_weight = st.number_input(
-                    "Weight (kg)",
+            with st.form("log_set_form", clear_on_submit=False):
+                log_date = st.date_input("Date", value=pd.Timestamp.now().date(), key="form_date")
+
+                log_ex_option = st.selectbox(
+                    "Exercise", options=existing_ex + ["+ Add New Exercise..."], key="form_ex_select"
+                )
+
+                if log_ex_option == "+ Add New Exercise...":
+                    log_ex = st.text_input("Enter New Exercise Name", key="form_new_ex_input")
+                else:
+                    log_ex = log_ex_option
+
+                # Quick-fill helper button logic
+                if not df.empty and log_ex_option != "+ Add New Exercise..." and log_ex_option:
+                    last_entry_df = df[df["Exercici"] == log_ex_option].sort_values(by="Data", ascending=False)
+                    if not last_entry_df.empty:
+                        last_row = last_entry_df.iloc[0]
+                        default_w = float(last_row["Pes (kg)"])
+                        default_r = int(last_row["Repeticions"])
+                        default_t = float(last_row["Temps (min)"])
+                        st.caption(f"💡 Last logged: {last_row['Data'].strftime('%d/%m/%Y')} → {default_w}kg x {default_r} reps")
+                        
+                        if st.form_submit_button("⚡ Copy Last Set Values"):
+                            st.session_state["prefill_weight"] = default_w
+                            st.session_state["prefill_reps"] = default_r
+                            st.session_state["prefill_time"] = default_t
+                            st.rerun()
+
+                # Fallback values from session state if copied
+                def_w = st.session_state.get("prefill_weight", None)
+                def_r = st.session_state.get("prefill_reps", None)
+                def_t = st.session_state.get("prefill_time", None)
+
+                col_weight, col_reps = st.columns(2)
+                with col_weight:
+                    log_weight = st.number_input(
+                        "Weight (kg)",
+                        min_value=0.0,
+                        step=0.5,
+                        value=def_w,
+                        placeholder="0.0",
+                    )
+                with col_reps:
+                    log_reps = st.number_input(
+                        "Reps", min_value=0, step=1, value=def_r, format="%d", placeholder="0"
+                    )
+
+                log_time = st.number_input(
+                    "Duration (min)",
                     min_value=0.0,
                     step=0.5,
-                    value=def_w,
+                    value=def_t,
                     placeholder="0.0",
                 )
-            with col_reps:
-                log_reps = st.number_input(
-                    "Reps", min_value=0, step=1, value=def_r, format="%d", placeholder="0"
-                )
 
-            log_time = st.number_input(
-                "Duration (min)",
-                min_value=0.0,
-                step=0.5,
-                value=def_t,
-                placeholder="0.0",
-            )
+                submit_set = st.form_submit_button("💾 Save Set to Cloud")
 
-            submit_set = st.form_submit_button("💾 Save Set to Cloud")
+                if submit_set:
+                    final_ex_name = log_ex.strip() if log_ex_option == "+ Add New Exercise..." else log_ex_option
+                    if not final_ex_name:
+                        st.error("Please enter a valid exercise name.")
+                    else:
+                        new_entry = {
+                            "Data": pd.to_datetime(log_date).strftime("%Y-%m-%d"),
+                            "Exercici": final_ex_name,
+                            "Grup Muscular": selected_log_mg.strip(),
+                            "Pes (kg)": log_weight if log_weight is not None else 0.0,
+                            "Repeticions": log_reps if log_reps is not None else 0,
+                            "Temps (min)": log_time if log_time is not None else 0.0,
+                        }
 
-            if submit_set:
-                final_ex_name = log_ex.strip() if log_ex_option == "+ Add New Exercise..." else log_ex_option
-                if not final_ex_name:
-                    st.error("Please enter a valid exercise name.")
-                else:
-                    new_entry = {
-                        "Data": pd.to_datetime(log_date).strftime("%Y-%m-%d"),
-                        "Exercici": final_ex_name,
-                        "Grup Muscular": selected_log_mg.strip(),
-                        "Pes (kg)": log_weight if log_weight is not None else 0.0,
-                        "Repeticions": log_reps if log_reps is not None else 0,
-                        "Temps (min)": log_time if log_time is not None else 0.0,
-                    }
-
-                    try:
-                        append_set_to_supabase(new_entry)
-                        st.session_state.pop("prefill_weight", None)
-                        st.session_state.pop("prefill_reps", None)
-                        st.session_state.pop("prefill_time", None)
-                        
-                        st.success(f"Saved: {final_ex_name}!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error saving set: {e}")
+                        try:
+                            append_set_to_supabase(new_entry)
+                            st.session_state.pop("prefill_weight", None)
+                            st.session_state.pop("prefill_reps", None)
+                            st.session_state.pop("prefill_time", None)
+                            
+                            st.success(f"Saved: {final_ex_name}!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error saving set: {e}")
 
     # --- 1B. DELETE MISTAKEN ENTRIES ---
     with manage_col2:
-        st.subheader("🗑️ Manage Logs")
-        if not df.empty:
-            min_date_val = df["Data"].min().date()
-            max_date_val = df["Data"].max().date()
-            
-            selected_del_date = st.date_input(
-                "Filter by Date",
-                value=max_date_val,
-                min_value=min_date_val,
-                max_value=max_date_val,
-                key="del_single_date_filter"
-            )
-            
-            available_del_ex = sorted(df["Exercici"].unique().tolist())
-            selected_del_ex = st.selectbox(
-                "Filter by Exercise",
-                options=["All Exercises"] + available_del_ex,
-                key="del_ex_filter"
-            )
-            
-            del_filtered_df = df[
-                df["Data"].dt.date == selected_del_date
-            ].copy()
-            
-            if selected_del_ex != "All Exercises":
-                del_filtered_df = del_filtered_df[del_filtered_df["Exercici"] == selected_del_ex]
-            
-            del_filtered_df = del_filtered_df.sort_values(by="Data", ascending=False)
-            
-            if not del_filtered_df.empty:
-                del_filtered_df["Display_Label"] = (
-                    del_filtered_df["Data"].dt.strftime("%d/%m/%Y") + " - " + 
-                    del_filtered_df["Exercici"] + " (" + 
-                    del_filtered_df["Pes (kg)"].astype(str) + "kg x " + 
-                    del_filtered_df["Repeticions"].astype(str) + "r)"
+        with st.expander("🗑️ **Remove Entry**", expanded=True):
+            if not df.empty:
+                min_date_val = df["Data"].min().date()
+                max_date_val = df["Data"].max().date()
+                
+                selected_del_date = st.date_input(
+                    "Filter by Date",
+                    value=max_date_val,
+                    min_value=min_date_val,
+                    max_value=max_date_val,
+                    key="del_single_date_filter"
                 )
                 
-                row_to_delete = st.selectbox(
-                    "Select entry to remove", 
-                    options=del_filtered_df.index, 
-                    format_func=lambda x: del_filtered_df.loc[x, "Display_Label"],
-                    key="del_row_select"
+                available_del_ex = sorted(df["Exercici"].unique().tolist())
+                selected_del_ex = st.selectbox(
+                    "Filter by Exercise",
+                    options=["All Exercises"] + available_del_ex,
+                    key="del_ex_filter"
                 )
                 
-                if st.button("❌ Delete Selected Entry", type="secondary", key="del_btn"):
-                    target_id = df.loc[row_to_delete, "id"]
-                    try:
-                        delete_row_from_supabase(target_id)
-                        st.success("Entry deleted successfully!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error deleting entry: {e}")
+                del_filtered_df = df[
+                    df["Data"].dt.date == selected_del_date
+                ].copy()
+                
+                if selected_del_ex != "All Exercises":
+                    del_filtered_df = del_filtered_df[del_filtered_df["Exercici"] == selected_del_ex]
+                
+                del_filtered_df = del_filtered_df.sort_values(by="Data", ascending=False)
+                
+                if not del_filtered_df.empty:
+                    del_filtered_df["Display_Label"] = (
+                        del_filtered_df["Data"].dt.strftime("%d/%m/%Y") + " - " + 
+                        del_filtered_df["Exercici"] + " (" + 
+                        del_filtered_df["Pes (kg)"].astype(str) + "kg x " + 
+                        del_filtered_df["Repeticions"].astype(str) + "r)"
+                    )
+                    
+                    row_to_delete = st.selectbox(
+                        "Select entry to remove", 
+                        options=del_filtered_df.index, 
+                        format_func=lambda x: del_filtered_df.loc[x, "Display_Label"],
+                        key="del_row_select"
+                    )
+                    
+                    if st.button("❌ Delete Selected Entry", type="secondary", key="del_btn"):
+                        target_id = df.loc[row_to_delete, "id"]
+                        try:
+                            delete_row_from_supabase(target_id)
+                            st.success("Entry deleted successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error deleting entry: {e}")
+                else:
+                    st.info("No logs match the selected date and exercise.")
             else:
-                st.info("No logs match the selected date and exercise.")
-        else:
-            st.info("No logs available to delete.")
+                st.info("No logs available to delete.")
 
 # =============================================================================
 # SECTION 2: WORKOUT VISUALIZATION (Wrapped in Outer st.expander)
