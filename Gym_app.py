@@ -162,13 +162,20 @@ def build_github_heatmap(df, selected_period):
         custom_vals.append(iso_str)
         color_vals.append(sets_val)
 
-    # Clean, Modern Cyber/Neon Intensity Colorscale (Zero browns)
+    # 10-Tier Spectrum mapping directly to your reference chart:
+    # 0 = Rest, 10-30% = Blues/Cyans, 40-60% = Greens/Yellows, 70-100% = Orange/Red
     colorscale = [
-        [0.00, "#f8fafc"],   # Rest day (Crisp minimal gray)
-        [0.01, "#38bdf8"],   # Light session (Soft Cyan)
-        [0.35, "#6366f1"],   # Moderate session (Electric Indigo-Blue)
-        [0.70, "#f97316"],   # Heavy session (Vibrant Orange)
-        [1.00, "#f43f5e"],   # Peak All-Time session (Hot Neon Pink-Red)
+        [0.00, "#f8fafc"],  # 0%   - Rest Day (Clean light slate)
+        [0.10, "#1d4ed8"],  # 10%  - Deep Royal Blue
+        [0.20, "#3b82f6"],  # 20%  - Bright Blue
+        [0.30, "#06b6d4"],  # 30%  - Cyan
+        [0.40, "#5eead4"],  # 40%  - Mint / Light Cyan
+        [0.50, "#86efac"],  # 50%  - Soft Green
+        [0.60, "#d9f99d"],  # 60%  - Lime / Yellow-Green
+        [0.70, "#fde047"],  # 70%  - Yellow
+        [0.80, "#f97316"],  # 80%  - Amber / Orange
+        [0.90, "#ea580c"],  # 90%  - Deep Orange
+        [1.00, "#dc2626"],  # 100%+ Peak Red
     ]
 
     fig = go.Figure(
