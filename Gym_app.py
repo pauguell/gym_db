@@ -96,7 +96,7 @@ def delete_row_from_supabase(row_id):
 def build_github_heatmap(df, selected_period):
     """Generates a Monthly Workout Consistency Heatmap using Scatter square markers.
     
-    Using go.Scatter instead of go.Heatmap enables native click/tap selection in st.plotly_chart.
+    Compact grid layout with hover tooltips disabled.
     """
     if df.empty or not selected_period:
         return None
@@ -134,8 +134,6 @@ def build_github_heatmap(df, selected_period):
 
     merged = pd.merge(grid_df, daily_logs, on="Data_Dt", how="left")
     merged["Total_Sets"] = merged["Total_Sets"].fillna(0)
-    merged["Total_Volume"] = merged["Total_Volume"].fillna(0)
-    merged["Exercises"] = merged["Exercises"].fillna("Descans")
 
     # Map weekday (0=Mon, 6=Sun)
     merged["Weekday"] = merged["Data"].dt.weekday
@@ -144,20 +142,17 @@ def build_github_heatmap(df, selected_period):
     first_weekday = start_date.weekday()
     merged["MonthWeekIdx"] = (merged["Data"].dt.day + first_weekday - 1) // 7
 
-    days_names = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte", "Diumenge"]
+    days_names = ["Dil", "Dim", "Dmc", "Dij", "Div", "Dis", "Diu"]
     max_weeks = int(merged["MonthWeekIdx"].max() + 1)
-    week_labels = [f"Setmana {w + 1}" for w in range(max_weeks)]
+    week_labels = [f"S{w + 1}" for w in range(max_weeks)]
 
-    x_vals, y_vals, text_vals, custom_vals, color_vals, hover_vals = [], [], [], [], [], []
+    x_vals, y_vals, text_vals, custom_vals, color_vals = [], [], [], [], []
 
     for _, row in merged.iterrows():
         w_idx = int(row["MonthWeekIdx"])
         d_idx = int(row["Weekday"])
         day_num = row["Data"].day
         sets_val = int(row["Total_Sets"])
-        vol_val = row["Total_Volume"]
-        ex_val = row["Exercises"]
-        d_str = row["Data_Dt"].strftime("%d/%m/%Y")
         iso_str = row["Data_Dt"].strftime("%Y-%m-%d")
 
         x_vals.append(days_names[d_idx])
@@ -165,16 +160,6 @@ def build_github_heatmap(df, selected_period):
         text_vals.append(str(day_num))
         custom_vals.append(iso_str)
         color_vals.append(sets_val)
-
-        if sets_val > 0:
-            hover_vals.append(
-                f"<b>📅 {d_str}</b><br>"
-                f"🏋️ Sèries: {sets_val}<br>"
-                f"📦 Volum: {vol_val:,.0f} kg<br>"
-                f"💪 Exercicis: {ex_val}"
-            )
-        else:
-            hover_vals.append(f"<b>📅 {d_str}</b><br>😴 Dia de descans")
 
     # Intensity colorscale (Rest day = light slate gray)
     colorscale = [
@@ -195,7 +180,7 @@ def build_github_heatmap(df, selected_period):
             mode="markers+text",
             marker=dict(
                 symbol="square",
-                size=38,
+                size=48,  # Larger square fill
                 color=color_vals,
                 colorscale=colorscale,
                 cmin=0,
@@ -205,10 +190,9 @@ def build_github_heatmap(df, selected_period):
             ),
             text=text_vals,
             textposition="middle center",
-            textfont=dict(size=12, color="#0f172a", family="Arial Black"),
+            textfont=dict(size=13, color="#0f172a", family="Arial Black"),
             customdata=custom_vals,
-            hovertext=hover_vals,
-            hoverinfo="text",
+            hoverinfo="none",  # Disabled hover details box
         )
     )
 
@@ -216,18 +200,19 @@ def build_github_heatmap(df, selected_period):
 
     fig.update_layout(
         title=dict(
-            text=f"📅 Calendari de Consistència: {month_name}",
+            text=f"📅 {month_name}",
             y=0.98,
             x=0.01,
             xanchor="left",
             yanchor="top"
         ),
-        height=300 + (max_weeks * 45),
-        margin=dict(l=80, r=20, t=90, b=30),
+        height=180 + (max_weeks * 45),  # Compact height scaling
+        margin=dict(l=40, r=10, t=50, b=10),  # Tighter outer padding
         yaxis=dict(
             autorange="reversed",
             showgrid=False,
             zeroline=False,
+            fixedrange=True,
             categoryorder="array",
             categoryarray=week_labels
         ),
@@ -235,6 +220,7 @@ def build_github_heatmap(df, selected_period):
             showgrid=False,
             zeroline=False,
             side="top",
+            fixedrange=True,
             categoryorder="array",
             categoryarray=days_names
         ),
