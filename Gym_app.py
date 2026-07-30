@@ -105,16 +105,16 @@ if df.empty:
     st.warning("No data found in Supabase database. Add your first workout below!")
 
 # =============================================================================
-# SECTION 1: DATA MANAGEMENT (Wrapped in Outer st.expander)
+# SECTION 1: DATA MANAGEMENT (Collapsed by Default)
 # =============================================================================
-with st.expander("🛠️ **Section 1: Data Management (Log & Delete)**", expanded=True):
+with st.expander("🛠️ **Section 1: Data Management (Log & Delete)**", expanded=False):
     st.caption("Log new workout sets or search and remove historical log entries.")
 
     manage_col1, manage_col2 = st.columns(2, gap="large")
 
     # --- 1A. LOG NEW SET FORM ---
     with manage_col1:
-        with st.expander("➕ **Log New Set to Cloud**", expanded=True):
+        with st.expander("➕ **Log New Set to Cloud**", expanded=False):
             if not df.empty:
                 existing_mg = sorted(df["Grup Muscular"].unique())
             else:
@@ -215,7 +215,7 @@ with st.expander("🛠️ **Section 1: Data Management (Log & Delete)**", expand
 
     # --- 1B. DELETE MISTAKEN ENTRIES ---
     with manage_col2:
-        with st.expander("🗑️ **Remove Entry**", expanded=True):
+        with st.expander("🗑️ **Remove Entry**", expanded=False):
             if not df.empty:
                 min_date_val = df["Data"].min().date()
                 max_date_val = df["Data"].max().date()
@@ -273,9 +273,9 @@ with st.expander("🛠️ **Section 1: Data Management (Log & Delete)**", expand
                 st.info("No logs available to delete.")
 
 # =============================================================================
-# SECTION 2: WORKOUT VISUALIZATION (Wrapped in Outer st.expander)
+# SECTION 2: WORKOUT VISUALIZATION (Collapsed by Default)
 # =============================================================================
-with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", expanded=True):
+with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", expanded=False):
     st.caption("Selecciona una data per veure el desglossament complet de tots els exercicis i sèries d'aquell dia.")
 
     if df.empty:
@@ -326,15 +326,16 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                 grup_muscular = ex_group["Grup Muscular"].iloc[0]
                 num_series = len(ex_group)
                 
-                with st.expander(f"💪 **{exercici}** ({grup_muscular}) — {num_series} sèries", expanded=True):
+                # Exercises in Section 2 now collapsed by default
+                with st.expander(f"💪 **{exercici}** ({grup_muscular}) — {num_series} sèries", expanded=False):
                     for i, (_, row) in enumerate(ex_group.iterrows()):
                         st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
 
 
 # =============================================================================
-# SECTION 3: DATA VISUALIZATION & ANALYTICS (Wrapped in Outer st.expander)
+# SECTION 3: DATA VISUALIZATION & ANALYTICS (Collapsed by Default)
 # =============================================================================
-with st.expander("📊 **Section 3: Anàlisi i Comparativa**", expanded=True):
+with st.expander("📊 **Section 3: Anàlisi i Comparativa**", expanded=False):
     if df.empty:
         st.info("No hi ha dades disponibles per analitzar.")
     else:
@@ -434,7 +435,7 @@ with st.expander("📊 **Section 3: Anàlisi i Comparativa**", expanded=True):
                     mg = ex_data["Grup Muscular"].iloc[0]
                     date_str = pd.to_datetime(ex_data["Data"].iloc[0]).strftime("%d/%m/%Y")
                     
-                    with st.expander(f"🏋️ **{ex}** ({mg}) — 📅 {date_str}"):
+                    with st.expander(f"🏋️ **{ex}** ({mg}) — 📅 {date_str}", expanded=False):
                         for i, (_, row) in enumerate(ex_data.iterrows()):
                             st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
 
@@ -499,7 +500,7 @@ with st.expander("📊 **Section 3: Anàlisi i Comparativa**", expanded=True):
                         val = ex_data["Set_Volume"].sum()
                         val_str = f"{val:,.0f} kg Vol"
 
-                    with st.expander(f"⭐ **{ex}** ({mg}) — 🏆 {val_str} ({date_str})"):
+                    with st.expander(f"⭐ **{ex}** ({mg}) — 🏆 {val_str} ({date_str})", expanded=False):
                         for i, (_, row) in enumerate(ex_data.iterrows()):
                             st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
 
