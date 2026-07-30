@@ -94,30 +94,33 @@ def delete_row_from_supabase(row_id):
 
 
 def build_github_heatmap(df, selected_period):
-    """Generates a Monthly Workout Consistency Heatmap in calendar format with date metadata."""
+    """Generates a Monthly Workout Consistency Heatmap using Scatter square markers.
+    
+    Using go.Scatter instead of go.Heatmap enables native click/tap selection in st.plotly_chart.
+    """
     if df.empty or not selected_period:
         return None
 
-    # Calculate global all-time maximum daily set count across the full database
+    # Calculate global all-time maximum daily set count across full database
     daily_sets_all_time = df.groupby(df["Data"].dt.date)["Set_Volume"].count()
     max_all_time_sets = int(daily_sets_all_time.max()) if not daily_sets_all_time.empty else 1
 
     # Filter dataframe to the selected month
     df_month = df[df["Data"].dt.to_period("M") == selected_period].copy()
 
-    # Determine full calendar bounds for the selected month
+    # Determine full calendar bounds for selected month
     start_date = selected_period.to_timestamp().date()
     if start_date.month == 12:
         end_date = datetime.date(start_date.year, 12, 31)
     else:
         end_date = datetime.date(start_date.year, start_date.month + 1, 1) - datetime.timedelta(days=1)
 
-    # Generate complete day-by-day sequence for the month
+    # Generate complete day-by-day sequence for month
     all_dates = pd.date_range(start=start_date, end=end_date, freq="D")
     grid_df = pd.DataFrame({"Data_Dt": all_dates.date})
     grid_df["Data"] = pd.to_datetime(grid_df["Data_Dt"])
 
-    # Aggregate actual user workout logs per day for the selected month
+    # Aggregate actual user workout logs per day for selected month
     daily_logs = (
         df_month.groupby(df_month["Data"].dt.date)
         .agg(
@@ -145,11 +148,7 @@ def build_github_heatmap(df, selected_period):
     max_weeks = int(merged["MonthWeekIdx"].max() + 1)
     week_labels = [f"Setmana {w + 1}" for w in range(max_weeks)]
 
-    # Initialize matrices for 7 columns (Mon-Sun) x N rows (Weeks)
-    z_matrix = np.full((max_weeks, 7), np.nan)
-    cell_text = np.full((max_weeks, 7), "", dtype=object)
-    hover_text = np.full((max_weeks, 7), "", dtype=object)
-    date_matrix = np.full((max_weeks, 7), "", dtype=object)
+    x_vals, y_vals, text_vals, custom_vals, color_vals, hover_vals = [], [], [], [], [], []
 
     for _, row in merged.iterrows():
         w_idx = int(row["MonthWeekIdx"])
@@ -161,49 +160,55 @@ def build_github_heatmap(df, selected_period):
         d_str = row["Data_Dt"].strftime("%d/%m/%Y")
         iso_str = row["Data_Dt"].strftime("%Y-%m-%d")
 
-        z_matrix[w_idx, d_idx] = sets_val
-        cell_text[w_idx, d_idx] = str(day_num)
-        date_matrix[w_idx, d_idx] = iso_str
+        x_vals.append(days_names[d_idx])
+        y_vals.append(week_labels[w_idx])
+        text_vals.append(str(day_num))
+        custom_vals.append(iso_str)
+        color_vals.append(sets_val)
 
         if sets_val > 0:
-            hover_text[w_idx, d_idx] = (
+            hover_vals.append(
                 f"<b>📅 {d_str}</b><br>"
                 f"🏋️ Sèries: {sets_val}<br>"
                 f"📦 Volum: {vol_val:,.0f} kg<br>"
                 f"💪 Exercicis: {ex_val}"
             )
         else:
-            hover_text[w_idx, d_idx] = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
+            hover_vals.append(f"<b>📅 {d_str}</b><br>😴 Dia de descans")
 
-    # Rainbow Color Scale
+    # Intensity colorscale (Rest day = light slate gray)
     colorscale = [
-        [0.00, "#e2e8f0"],   # Rest / empty day (Lighter Slate Gray)
-        [0.01, "#6366f1"],   # Indigo
-        [0.20, "#3b82f6"],   # Blue
-        [0.40, "#06b6d4"],   # Cyan
-        [0.60, "#10b981"],   # Green
-        [0.75, "#eab308"],   # Yellow
-        [0.90, "#f97316"],   # Orange
-        [1.00, "#ef4444"],   # Red
+        [0.00, "#e2e8f0"],
+        [0.01, "#6366f1"],
+        [0.20, "#3b82f6"],
+        [0.40, "#06b6d4"],
+        [0.60, "#10b981"],
+        [0.75, "#eab308"],
+        [0.90, "#f97316"],
+        [1.00, "#ef4444"],
     ]
 
     fig = go.Figure(
-        data=go.Heatmap(
-            z=z_matrix,
-            x=days_names,
-            y=week_labels,
-            text=cell_text,
-            customdata=date_matrix,
-            texttemplate="%{text}",
-            textfont=dict(size=13, color="#0f172a", family="Arial Black"),
-            hovertext=hover_text,
+        data=go.Scatter(
+            x=x_vals,
+            y=y_vals,
+            mode="markers+text",
+            marker=dict(
+                symbol="square",
+                size=38,
+                color=color_vals,
+                colorscale=colorscale,
+                cmin=0,
+                cmax=max_all_time_sets,
+                showscale=False,
+                line=dict(width=1, color="#cbd5e1"),
+            ),
+            text=text_vals,
+            textposition="middle center",
+            textfont=dict(size=12, color="#0f172a", family="Arial Black"),
+            customdata=custom_vals,
+            hovertext=hover_vals,
             hoverinfo="text",
-            colorscale=colorscale,
-            zmin=0,
-            zmax=max_all_time_sets,
-            showscale=False,
-            xgap=5,
-            ygap=5,
         )
     )
 
@@ -217,13 +222,26 @@ def build_github_heatmap(df, selected_period):
             xanchor="left",
             yanchor="top"
         ),
-        height=320 + (max_weeks * 30),
+        height=300 + (max_weeks * 45),
         margin=dict(l=80, r=20, t=90, b=30),
-        yaxis=dict(autorange="reversed", showgrid=False, zeroline=False),
-        xaxis=dict(showgrid=False, zeroline=False, side="top"),
+        yaxis=dict(
+            autorange="reversed",
+            showgrid=False,
+            zeroline=False,
+            categoryorder="array",
+            categoryarray=week_labels
+        ),
+        xaxis=dict(
+            showgrid=False,
+            zeroline=False,
+            side="top",
+            categoryorder="array",
+            categoryarray=days_names
+        ),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(size=12),
+        clickmode="event+select",
     )
 
     return fig
@@ -410,20 +428,20 @@ with st.expander("🛠️ **Section 1: Data Management (Log & Delete)**", expand
                 st.info("No logs available to delete.")
 
 # =============================================================================
-# SECTION 2: WORKOUT VISUALIZATION (Click-to-View Calendar)
+# SECTION 2: WORKOUT VISUALIZATION (Tap-to-View Calendar Grid)
 # =============================================================================
 with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", expanded=False):
-    st.caption("Fes clic en qualsevol dia del calendari per veure el desglossament de l'entrenament a sota.")
+    st.caption("Toca o fes clic en qualsevol dia del calendari per veure el desglossament de l'entrenament a sota.")
 
     if df.empty:
         st.info("No hi ha entrenaments registrats a la base de dades.")
     else:
-        # 1. Normalize Date column to ensure datetime & date matching work reliably
+        # Normalize Date column
         df["Data_dt"] = pd.to_datetime(df["Data"])
         df["YearMonth"] = df["Data_dt"].dt.to_period("M")
         available_months = sorted(df["YearMonth"].unique(), reverse=True)
 
-        # 2. Month Selector Dropdown (Controls which calendar grid is displayed)
+        # Month Selector Dropdown
         selected_month_period = st.selectbox(
             "📆 Selecciona el Mes per al Calendari:",
             options=available_months,
@@ -431,7 +449,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
             key="heatmap_month_picker"
         )
 
-        # 3. Determine all calendar dates for the selected month
+        # Generate calendar date bounds for selected month
         start_date = selected_month_period.to_timestamp().date()
         if start_date.month == 12:
             end_date = datetime.date(start_date.year, 12, 31)
@@ -440,11 +458,11 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
             
         all_month_dates = sorted(pd.date_range(start_date, end_date).date, reverse=True)
 
-        # Initialize default selected date to the latest day in the selected month if not set or out of bounds
+        # Set initial date selection if empty or out of month bounds
         if "selected_workout_date" not in st.session_state or st.session_state["selected_workout_date"] not in all_month_dates:
             st.session_state["selected_workout_date"] = all_month_dates[0]
 
-        # 4. Build & Render interactive calendar heatmap
+        # Build & Render interactive scatter calendar
         heatmap_fig = build_github_heatmap(df, selected_month_period)
 
         selected_event = None
@@ -458,49 +476,24 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                 key="calendar_heatmap_chart"
             )
 
-        # 5. Intercept Click Selection from Plotly Chart
+        # Extract selected date from tap event
         if selected_event and "selection" in selected_event and selected_event["selection"].get("points"):
             points = selected_event["selection"]["points"]
             if len(points) > 0:
-                pt = points[0]
-                clicked_date_obj = None
-
-                # Method A: Direct customdata extraction
-                raw_cd = pt.get("customdata")
+                raw_cd = points[0].get("customdata")
                 if raw_cd:
-                    cd_val = raw_cd[0] if isinstance(raw_cd, list) and len(raw_cd) > 0 else raw_cd
+                    clicked_date_str = raw_cd[0] if isinstance(raw_cd, list) else str(raw_cd)
                     try:
-                        clicked_date_obj = datetime.datetime.strptime(str(cd_val), "%Y-%m-%d").date()
+                        clicked_date_obj = datetime.datetime.strptime(clicked_date_str, "%Y-%m-%d").date()
+                        if clicked_date_obj in all_month_dates and st.session_state["selected_workout_date"] != clicked_date_obj:
+                            st.session_state["selected_workout_date"] = clicked_date_obj
+                            st.rerun()
                     except ValueError:
                         pass
 
-                # Method B: Fallback calculation via x (Day Name) and y (Week Label)
-                if not clicked_date_obj and "x" in pt and "y" in pt:
-                    try:
-                        day_name = pt["x"]
-                        week_str = pt["y"]  # e.g., "Setmana 2"
-                        week_idx = int(week_str.replace("Setmana ", "")) - 1
-                        
-                        days_names = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte", "Diumenge"]
-                        weekday_idx = days_names.index(day_name)
-                        
-                        first_weekday = start_date.weekday()
-                        day_num = (week_idx * 7) + (weekday_idx - first_weekday) + 1
-                        
-                        if 1 <= day_num <= (end_date - start_date).days + 1:
-                            clicked_date_obj = datetime.date(start_date.year, start_date.month, day_num)
-                    except (ValueError, IndexError):
-                        pass
-
-                # Update selected date in session state and rerun to reflect the selection
-                if clicked_date_obj and clicked_date_obj in all_month_dates:
-                    if st.session_state["selected_workout_date"] != clicked_date_obj:
-                        st.session_state["selected_workout_date"] = clicked_date_obj
-                        st.rerun()
-
         st.markdown("---")
 
-        # 6. Display workout details directly for the clicked/active date
+        # Display workout details for the active tapped date
         selected_date = st.session_state["selected_workout_date"]
         df_day = df[df["Data_dt"].dt.date == selected_date].copy()
 
@@ -540,7 +533,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                 with st.expander(f"💪 **{exercici}** ({grup_muscular}) — {num_series} sèries", expanded=False):
                     for i, (_, row) in enumerate(ex_group.iterrows()):
                         st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
-                        
+
 # =============================================================================
 # SECTION 3: DATA VISUALIZATION & ANALYTICS (Collapsed by Default)
 # =============================================================================
