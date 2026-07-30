@@ -29,20 +29,19 @@ supabase = init_supabase()
 # -----------------------------------------------------------------------------
 @st.cache_data
 def load_data():
-    # Fetch all records from the gym_logs table in Supabase
     response = supabase.table("gym_logs").select("*").execute()
     data = response.data
     
     if not data:
         return pd.DataFrame(columns=[
-            "Data", "Exercici", "Grup Muscular", "Pes (kg)", 
+            "id", "Data", "Exercici", "Grup Muscular", "Pes (kg)", 
             "Repeticions", "Temps (min)", "Set_Volume", "Estimated_1RM"
         ])
     
     df = pd.DataFrame(data)
 
-    # Map Supabase column names to the dashboard's expected names
     column_mapping = {
+        "id": "id",
         "data": "Data",
         "exercici": "Exercici",
         "grup_muscular": "Grup Muscular",
@@ -77,8 +76,6 @@ def load_data():
 # -----------------------------------------------------------------------------
 def append_set_to_supabase(new_data):
     """Appends a new set entry directly to the Supabase gym_logs table."""
-    
-    # Map input data to exact Supabase table column names
     payload = {
         "data": new_data["Data"],
         "grup_muscular": new_data["Grup Muscular"],
@@ -87,9 +84,16 @@ def append_set_to_supabase(new_data):
         "repeticions": new_data["Repeticions"],
         "temps_min": new_data["Temps (min)"],
     }
+    supabase.table("gym_logs").insert(payload).execute()
+    st.cache_data.clear()
 
-    # Insert into Supabase
-    response = supabase.table("gym_logs").insert(payload).execute()
+
+# -----------------------------------------------------------------------------
+# HELPER: DELETE ROW FROM SUPABASE
+# -----------------------------------------------------------------------------
+def delete_row_from_supabase(row_id):
+    """Deletes a specific log entry from Supabase by its unique ID."""
+    supabase.table("gym_logs").delete().eq("id", row_id).execute()
     st.cache_data.clear()
 
 
@@ -172,6 +176,37 @@ with st.sidebar.expander("➕ **Log New Set to Cloud**", expanded=True):
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error saving set: {e}")
+
+# --- 3B. DELETE MISTAKEN ENTRIES ---
+with st.sidebar.expander("🗑️ **Delete / Manage Logs**", expanded=False):
+    st.caption("Select a recent entry to delete if you made a mistake.")
+    
+    recent_df = df.sort_values(by="Data", ascending=False).head(50).copy()
+    
+    if not recent_df.empty:
+        recent_df["Display_Label"] = (
+            recent_df["Data"].dt.strftime("%d/%m/%Y") + " - " + 
+            recent_df["Exercici"] + " (" + 
+            recent_df["Pes (kg)"].astype(str) + "kg x " + 
+            recent_df["Repeticions"].astype(str) + "r)"
+        )
+        
+        row_to_delete = st.selectbox(
+            "Select entry to remove", 
+            options=recent_df.index, 
+            format_func=lambda x: recent_df.loc[x, "Display_Label"]
+        )
+        
+        if st.button("❌ Delete Selected Entry", type="secondary"):
+            target_id = df.loc[row_to_delete, "id"]
+            try:
+                delete_row_from_supabase(target_id)
+                st.success("Entry deleted successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error deleting entry: {e}")
+    else:
+        st.info("No logs available to delete.")
 
 # -----------------------------------------------------------------------------
 # GLOBAL FILTERS (EXPANDER)
