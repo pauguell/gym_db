@@ -440,7 +440,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
             
         all_month_dates = sorted(pd.date_range(start_date, end_date).date, reverse=True)
 
-        # Ensure default date exists in state BEFORE chart rendering
+        # Ensure default date exists in state BEFORE chart rendering & selectbox key binding
         if "selected_workout_date" not in st.session_state or st.session_state["selected_workout_date"] not in all_month_dates:
             st.session_state["selected_workout_date"] = all_month_dates[0]
 
@@ -458,14 +458,14 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                 key="calendar_heatmap_chart"
             )
 
-        # 5. Robust Extraction of Clicked Date from Plotly Heatmap Event
+        # 5. Extract Clicked Date from Plotly Heatmap Event
         if selected_event and "selection" in selected_event and selected_event["selection"].get("points"):
             points = selected_event["selection"]["points"]
             if len(points) > 0:
                 pt = points[0]
                 clicked_date_obj = None
 
-                # Method A: Direct customdata check (if present)
+                # Method A: Direct customdata check
                 raw_cd = pt.get("customdata")
                 if raw_cd:
                     cd_val = raw_cd[0] if isinstance(raw_cd, list) and len(raw_cd) > 0 else raw_cd
@@ -493,7 +493,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                     except (ValueError, IndexError):
                         pass
 
-                # If date was successfully resolved, update state & rerun
+                # Direct update to session_state key driving the selectbox
                 if clicked_date_obj and clicked_date_obj in all_month_dates:
                     if st.session_state["selected_workout_date"] != clicked_date_obj:
                         st.session_state["selected_workout_date"] = clicked_date_obj
@@ -501,20 +501,15 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
 
         st.markdown("---")
 
-        # 6. Date Picker Dropdown (synced with heatmap clicks via callback)
-        def on_date_change():
-            st.session_state["selected_workout_date"] = st.session_state["date_select_widget"]
-
+        # 6. Date Picker Dropdown directly bound to 'selected_workout_date'
         selected_date = st.selectbox(
             "📅 Selecciona la Data de l'Entrenament (o fes clic al calendari):",
             options=all_month_dates,
-            index=all_month_dates.index(st.session_state["selected_workout_date"]),
             format_func=lambda d: d.strftime("%d/%m/%Y"),
-            key="date_select_widget",
-            on_change=on_date_change
+            key="selected_workout_date"
         )
 
-        # 7. Robust Data Filtering for the selected day
+        # 7. Data Filtering for the selected day
         df_day = df[df["Data_dt"].dt.date == selected_date].copy()
 
         if df_day.empty:
