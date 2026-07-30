@@ -410,10 +410,10 @@ with st.expander("🛠️ **Section 1: Data Management (Log & Delete)**", expand
                 st.info("No logs available to delete.")
 
 # =============================================================================
-# SECTION 2: WORKOUT VISUALIZATION (Interactive Calendar + Click-to-View)
+# SECTION 2: WORKOUT VISUALIZATION (Click-to-View Calendar)
 # =============================================================================
 with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", expanded=False):
-    st.caption("Fes clic en qualsevol dia del calendari per veure el desglossament de les sèries a sota.")
+    st.caption("Fes clic en qualsevol dia del calendari per veure el desglossament de l'entrenament a sota.")
 
     if df.empty:
         st.info("No hi ha entrenaments registrats a la base de dades.")
@@ -423,7 +423,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
         df["YearMonth"] = df["Data_dt"].dt.to_period("M")
         available_months = sorted(df["YearMonth"].unique(), reverse=True)
 
-        # 2. Month Selector Dropdown
+        # 2. Month Selector Dropdown (Controls which calendar grid is displayed)
         selected_month_period = st.selectbox(
             "📆 Selecciona el Mes per al Calendari:",
             options=available_months,
@@ -431,7 +431,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
             key="heatmap_month_picker"
         )
 
-        # 3. Generate all calendar dates for selected month (including rest days)
+        # 3. Determine all calendar dates for the selected month
         start_date = selected_month_period.to_timestamp().date()
         if start_date.month == 12:
             end_date = datetime.date(start_date.year, 12, 31)
@@ -440,7 +440,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
             
         all_month_dates = sorted(pd.date_range(start_date, end_date).date, reverse=True)
 
-        # Ensure default date exists in state BEFORE chart rendering & selectbox key binding
+        # Initialize default selected date to the latest day in the selected month if not set or out of bounds
         if "selected_workout_date" not in st.session_state or st.session_state["selected_workout_date"] not in all_month_dates:
             st.session_state["selected_workout_date"] = all_month_dates[0]
 
@@ -458,14 +458,14 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                 key="calendar_heatmap_chart"
             )
 
-        # 5. Extract Clicked Date from Plotly Heatmap Event
+        # 5. Intercept Click Selection from Plotly Chart
         if selected_event and "selection" in selected_event and selected_event["selection"].get("points"):
             points = selected_event["selection"]["points"]
             if len(points) > 0:
                 pt = points[0]
                 clicked_date_obj = None
 
-                # Method A: Direct customdata check
+                # Method A: Direct customdata extraction
                 raw_cd = pt.get("customdata")
                 if raw_cd:
                     cd_val = raw_cd[0] if isinstance(raw_cd, list) and len(raw_cd) > 0 else raw_cd
@@ -474,7 +474,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                     except ValueError:
                         pass
 
-                # Method B: Fallback calculation via x (Day Name) and y (Week Index)
+                # Method B: Fallback calculation via x (Day Name) and y (Week Label)
                 if not clicked_date_obj and "x" in pt and "y" in pt:
                     try:
                         day_name = pt["x"]
@@ -484,7 +484,6 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                         days_names = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte", "Diumenge"]
                         weekday_idx = days_names.index(day_name)
                         
-                        # Calculate date from week and weekday index
                         first_weekday = start_date.weekday()
                         day_num = (week_idx * 7) + (weekday_idx - first_weekday) + 1
                         
@@ -493,7 +492,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                     except (ValueError, IndexError):
                         pass
 
-                # Direct update to session_state key driving the selectbox
+                # Update selected date in session state and rerun to reflect the selection
                 if clicked_date_obj and clicked_date_obj in all_month_dates:
                     if st.session_state["selected_workout_date"] != clicked_date_obj:
                         st.session_state["selected_workout_date"] = clicked_date_obj
@@ -501,15 +500,8 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
 
         st.markdown("---")
 
-        # 6. Date Picker Dropdown directly bound to 'selected_workout_date'
-        selected_date = st.selectbox(
-            "📅 Selecciona la Data de l'Entrenament (o fes clic al calendari):",
-            options=all_month_dates,
-            format_func=lambda d: d.strftime("%d/%m/%Y"),
-            key="selected_workout_date"
-        )
-
-        # 7. Data Filtering for the selected day
+        # 6. Display workout details directly for the clicked/active date
+        selected_date = st.session_state["selected_workout_date"]
         df_day = df[df["Data_dt"].dt.date == selected_date].copy()
 
         if df_day.empty:
@@ -548,7 +540,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                 with st.expander(f"💪 **{exercici}** ({grup_muscular}) — {num_series} sèries", expanded=False):
                     for i, (_, row) in enumerate(ex_group.iterrows()):
                         st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
-
+                        
 # =============================================================================
 # SECTION 3: DATA VISUALIZATION & ANALYTICS (Collapsed by Default)
 # =============================================================================
