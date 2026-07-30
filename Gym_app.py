@@ -418,8 +418,9 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
     if df.empty:
         st.info("No hi ha entrenaments registrats a la base de dades.")
     else:
-        # 1. Extract available Month-Year periods from dataset
-        df["YearMonth"] = df["Data"].dt.to_period("M")
+        # 1. Normalize Date column to ensure datetime & date matching work reliably
+        df["Data_dt"] = pd.to_datetime(df["Data"])
+        df["YearMonth"] = df["Data_dt"].dt.to_period("M")
         available_months = sorted(df["YearMonth"].unique(), reverse=True)
 
         # 2. Month Selector Dropdown
@@ -430,7 +431,7 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
             key="heatmap_month_picker"
         )
 
-        # 3. All calendar dates for the selected month (includes rest days)
+        # 3. Generate all calendar dates for selected month (including rest days)
         start_date = selected_month_period.to_timestamp().date()
         if start_date.month == 12:
             end_date = datetime.date(start_date.year, 12, 31)
@@ -439,10 +440,13 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
             
         all_month_dates = sorted(pd.date_range(start_date, end_date).date, reverse=True)
 
-        # 4. Build interactive calendar heatmap
+        # Ensure default date exists in state BEFORE chart rendering
+        if "selected_workout_date" not in st.session_state or st.session_state["selected_workout_date"] not in all_month_dates:
+            st.session_state["selected_workout_date"] = all_month_dates[0]
+
+        # 4. Build & Render interactive calendar heatmap
         heatmap_fig = build_github_heatmap(df, selected_month_period)
 
-        # 5. Render Plotly Chart with selection listener
         selected_event = None
         if heatmap_fig:
             selected_event = st.plotly_chart(
@@ -454,51 +458,72 @@ with st.expander("📋 **Section 2: Visualització d'Entrenament per Dia**", exp
                 key="calendar_heatmap_chart"
             )
 
-        # 6. Extract clicked date robustly from Plotly event dict
+        # 5. Robust Extraction of Clicked Date from Plotly Heatmap Event
         if selected_event and "selection" in selected_event and selected_event["selection"].get("points"):
-            point = selected_event["selection"]["points"][0]
-            raw_cd = point.get("customdata")
-            
-            # Handle string vs single-element list returns
-            if isinstance(raw_cd, list) and len(raw_cd) > 0:
-                clicked_date_str = raw_cd[0]
-            else:
-                clicked_date_str = str(raw_cd) if raw_cd else None
+            points = selected_event["selection"]["points"]
+            if len(points) > 0:
+                pt = points[0]
+                clicked_date_obj = None
 
-            if clicked_date_str:
-                try:
-                    clicked_date = datetime.datetime.strptime(clicked_date_str, "%Y-%m-%d").date()
-                    if clicked_date in all_month_dates:
-                        # Update session state & trigger immediate UI update
-                        if st.session_state.get("workout_day_picker") != clicked_date:
-                            st.session_state["workout_day_picker"] = clicked_date
-                            st.rerun()
-                except ValueError:
-                    pass
+                # Method A: Direct customdata check (if present)
+                raw_cd = pt.get("customdata")
+                if raw_cd:
+                    cd_val = raw_cd[0] if isinstance(raw_cd, list) and len(raw_cd) > 0 else raw_cd
+                    try:
+                        clicked_date_obj = datetime.datetime.strptime(str(cd_val), "%Y-%m-%d").date()
+                    except ValueError:
+                        pass
+
+                # Method B: Fallback calculation via x (Day Name) and y (Week Index)
+                if not clicked_date_obj and "x" in pt and "y" in pt:
+                    try:
+                        day_name = pt["x"]
+                        week_str = pt["y"]  # e.g., "Setmana 2"
+                        week_idx = int(week_str.replace("Setmana ", "")) - 1
+                        
+                        days_names = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte", "Diumenge"]
+                        weekday_idx = days_names.index(day_name)
+                        
+                        # Calculate date from week and weekday index
+                        first_weekday = start_date.weekday()
+                        day_num = (week_idx * 7) + (weekday_idx - first_weekday) + 1
+                        
+                        if 1 <= day_num <= (end_date - start_date).days + 1:
+                            clicked_date_obj = datetime.date(start_date.year, start_date.month, day_num)
+                    except (ValueError, IndexError):
+                        pass
+
+                # If date was successfully resolved, update state & rerun
+                if clicked_date_obj and clicked_date_obj in all_month_dates:
+                    if st.session_state["selected_workout_date"] != clicked_date_obj:
+                        st.session_state["selected_workout_date"] = clicked_date_obj
+                        st.rerun()
 
         st.markdown("---")
 
-        # Ensure default date exists in state
-        if "workout_day_picker" not in st.session_state or st.session_state["workout_day_picker"] not in all_month_dates:
-            st.session_state["workout_day_picker"] = all_month_dates[0]
+        # 6. Date Picker Dropdown (synced with heatmap clicks via callback)
+        def on_date_change():
+            st.session_state["selected_workout_date"] = st.session_state["date_select_widget"]
 
-        # 7. Date Picker Dropdown (synced automatically with calendar clicks)
         selected_date = st.selectbox(
             "📅 Selecciona la Data de l'Entrenament (o fes clic al calendari):",
             options=all_month_dates,
+            index=all_month_dates.index(st.session_state["selected_workout_date"]),
             format_func=lambda d: d.strftime("%d/%m/%Y"),
-            key="workout_day_picker"
+            key="date_select_widget",
+            on_change=on_date_change
         )
 
-        df_day = df[pd.to_datetime(df["Data"]).dt.date == selected_date].copy()
+        # 7. Robust Data Filtering for the selected day
+        df_day = df[df["Data_dt"].dt.date == selected_date].copy()
 
         if df_day.empty:
             st.info(f"😴 **{selected_date.strftime('%d/%m/%Y')}** és un dia de descans (sense entrenaments registrats).")
         else:
             def format_workout_set(row):
-                p = row["Pes (kg)"]
-                r = row["Repeticions"]
-                t = row["Temps (min)"]
+                p = row.get("Pes (kg)", 0)
+                r = row.get("Repeticions", 0)
+                t = row.get("Temps (min)", 0)
 
                 pes_str = f"{int(p)}" if p == int(p) else f"{p}"
                 reps_str = f"{int(r)}" if r == int(r) else f"{r}"
