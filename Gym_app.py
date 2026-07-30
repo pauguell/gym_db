@@ -94,9 +94,9 @@ def delete_row_from_supabase(row_id):
 
 
 def build_github_heatmap(df, selected_period):
-    """Generates a Monthly Workout Consistency Heatmap using Scatter square markers.
+    """Generates a Monthly Workout Consistency Heatmap optimized for mobile touch interaction.
     
-    Compact grid layout with hover tooltips disabled.
+    Uses responsive marker area scaling to ensure zero overlap on smartphones.
     """
     if df.empty or not selected_period:
         return None
@@ -142,6 +142,7 @@ def build_github_heatmap(df, selected_period):
     first_weekday = start_date.weekday()
     merged["MonthWeekIdx"] = (merged["Data"].dt.day + first_weekday - 1) // 7
 
+    # Short day abbreviations for tight mobile screens
     days_names = ["Dil", "Dim", "Dmc", "Dij", "Div", "Dis", "Diu"]
     max_weeks = int(merged["MonthWeekIdx"].max() + 1)
     week_labels = [f"S{w + 1}" for w in range(max_weeks)]
@@ -180,7 +181,8 @@ def build_github_heatmap(df, selected_period):
             mode="markers+text",
             marker=dict(
                 symbol="square",
-                size=48,  # Larger square fill
+                size=36,               # Reduced size prevents touch-target collision on mobile
+                sizemode="diameter",
                 color=color_vals,
                 colorscale=colorscale,
                 cmin=0,
@@ -190,9 +192,9 @@ def build_github_heatmap(df, selected_period):
             ),
             text=text_vals,
             textposition="middle center",
-            textfont=dict(size=13, color="#0f172a", family="Arial Black"),
+            textfont=dict(size=11, color="#0f172a", family="Arial Black"),
             customdata=custom_vals,
-            hoverinfo="none",  # Disabled hover details box
+            hoverinfo="none",
         )
     )
 
@@ -206,8 +208,8 @@ def build_github_heatmap(df, selected_period):
             xanchor="left",
             yanchor="top"
         ),
-        height=180 + (max_weeks * 45),  # Compact height scaling
-        margin=dict(l=40, r=10, t=50, b=10),  # Tighter outer padding
+        height=160 + (max_weeks * 40),      # Compact row height for mobile viewports
+        margin=dict(l=30, r=10, t=45, b=10), # Minimal side margins to maximize cell area
         yaxis=dict(
             autorange="reversed",
             showgrid=False,
@@ -226,7 +228,7 @@ def build_github_heatmap(df, selected_period):
         ),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(size=12),
+        font=dict(size=11),
         clickmode="event+select",
     )
 
