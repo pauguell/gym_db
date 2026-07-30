@@ -93,23 +93,35 @@ def delete_row_from_supabase(row_id):
     st.cache_data.clear()
 
 
-def build_github_heatmap(df):
-    """Generates a Monthly Workout Consistency Heatmap (Days 1-31 on X-axis, Months on Y-axis)."""
-    if df.empty:
+def build_github_heatmap(df, selected_period):
+    """Generates a Monthly Workout Consistency Heatmap for a single selected month.
+    
+    X-axis: Days of Month (1 to 31)
+    Y-axis: Selected Month
+    Colors: Gray for rest (0), Blue -> Purple -> Red for training intensity.
+    """
+    if df.empty or not selected_period:
         return None
 
-    # Determine date range (past 12 full calendar months up to latest log)
-    max_date = df["Data"].max().date()
-    min_date = (max_date - datetime.timedelta(days=365)).replace(day=1)
+    # Filter dataframe to the selected year-month period
+    df_month = df[df["Data"].dt.to_period("M") == selected_period].copy()
 
-    # Generate full date backbone
-    all_dates = pd.date_range(start=min_date, end=max_date, freq="D")
+    # Determine start and end date for the selected month
+    start_date = selected_period.to_timestamp().date()
+    # Calculate last day of month
+    if start_date.month == 12:
+        end_date = datetime.date(start_date.year, 12, 31)
+    else:
+        end_date = datetime.date(start_date.year, start_date.month + 1, 1) - datetime.timedelta(days=1)
+
+    # Full date grid for the month
+    all_dates = pd.date_range(start=start_date, end=end_date, freq="D")
     grid_df = pd.DataFrame({"Data_Dt": all_dates.date})
     grid_df["Data"] = pd.to_datetime(grid_df["Data_Dt"])
 
-    # Aggregate actual user logs per day
+    # Aggregate daily volume and sets
     daily_logs = (
-        df.groupby(df["Data"].dt.date)
+        df_month.groupby(df_month["Data"].dt.date)
         .agg(
             Total_Volume=("Set_Volume", "sum"),
             Total_Sets=("Set_Volume", "count"),
@@ -123,60 +135,37 @@ def build_github_heatmap(df):
     merged["Total_Sets"] = merged["Total_Sets"].fillna(0)
     merged["Total_Volume"] = merged["Total_Volume"].fillna(0)
     merged["Exercises"] = merged["Exercises"].fillna("Descans")
+    merged["Day_Of_Month"] = merged["Data"].dt.day
 
-    # Extract Month-Year label for Y-axis and Day of Month (1-31) for X-axis
-    merged["Month_Label"] = merged["Data"].dt.strftime("%b %Y")  # e.g., "Jan 2026"
-    merged["Month_Sort"] = merged["Data"].dt.to_period("M")
-    merged["Day_Of_Month"] = merged["Data"].dt.day  # 1 to 31
+    month_label = start_date.strftime("%B %Y").capitalize()
 
-    # Order months chronologically
-    unique_months = (
-        merged[["Month_Label", "Month_Sort"]]
-        .drop_duplicates()
-        .sort_values("Month_Sort")["Month_Label"]
-        .tolist()
-    )
+    # Build 1x31 row vector for the heatmap
+    full_month_days = list(range(1, 32))
+    day_map = {row["Day_Of_Month"]: row for _, row in merged.iterrows()}
 
-    # Build matrix for Plotly Heatmap (Days 1..31 vs Months)
-    pivot_sets = merged.pivot(index="Month_Label", columns="Day_Of_Month", values="Total_Sets").reindex(unique_months)
-    pivot_dates = merged.pivot(index="Month_Label", columns="Day_Of_Month", values="Data_Dt").reindex(unique_months)
-    pivot_vol = merged.pivot(index="Month_Label", columns="Day_Of_Month", values="Total_Volume").reindex(unique_months)
-    pivot_ex = merged.pivot(index="Month_Label", columns="Day_Of_Month", values="Exercises").reindex(unique_months)
-
-    # Text hover matrix
+    z_vals = []
     hover_text = []
-    for r in range(len(pivot_sets)):
-        row_hover = []
-        for c in range(len(pivot_sets.columns)):
-            raw_date = pivot_dates.iloc[r, c]
-            raw_sets = pivot_sets.iloc[r, c]
-            raw_vol = pivot_vol.iloc[r, c]
-            raw_ex = pivot_ex.iloc[r, c]
 
-            if pd.notnull(raw_date):
-                d_str = raw_date.strftime("%d/%m/%Y")
-                sets_val = int(raw_sets) if pd.notnull(raw_sets) else 0
-                vol_val = raw_vol if pd.notnull(raw_vol) else 0.0
-                ex_val = raw_ex if pd.notnull(raw_ex) else "Descans"
+    for d in full_month_days:
+        if d in day_map:
+            row = day_map[d]
+            d_str = row["Data_Dt"].strftime("%d/%m/%Y")
+            sets_val = int(row["Total_Sets"])
+            vol_val = row["Total_Volume"]
+            ex_val = row["Exercises"]
 
-                if sets_val > 0:
-                    txt = f"<b>📅 {d_str}</b><br>🏋️ Sèries: {sets_val}<br>📦 Volum: {vol_val:,.0f} kg<br>💪 Exercicis: {ex_val}"
-                else:
-                    txt = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
+            z_vals.append(sets_val)
+            if sets_val > 0:
+                txt = f"<b>📅 {d_str}</b><br>🏋️ Sèries: {sets_val}<br>📦 Volum: {vol_val:,.0f} kg<br>💪 Exercicis: {ex_val}"
             else:
-                txt = ""  # Days that don't exist in shorter months (e.g., Feb 30/31)
+                txt = f"<b>📅 {d_str}</b><br>😴 Dia de descans"
+            hover_text.append(txt)
+        else:
+            # Days that don't exist in the month (e.g., Feb 30/31)
+            z_vals.append(np.nan)
+            hover_text.append("")
 
-            row_hover.append(txt)
-        hover_text.append(row_hover)
-
-    # Fill invalid calendar days with NaN so they remain visually empty
-    z_matrix = pivot_sets.values.astype(float)
-    for r in range(len(pivot_dates)):
-        for c in range(len(pivot_dates.columns)):
-            if pd.isnull(pivot_dates.iloc[r, c]):
-                z_matrix[r, c] = np.nan
-
-    # Custom Color Scale: Gray for rest (0), Blue -> Purple -> Red gradient for training
+    # Blue -> Purple -> Red color scale (Gray for rest)
     colorscale = [
         [0.00, "#2d3748"],   # Rest / empty day (Dark Gray)
         [0.01, "#3b82f6"],   # Low activity (Bright Blue)
@@ -187,23 +176,23 @@ def build_github_heatmap(df):
 
     fig = go.Figure(
         data=go.Heatmap(
-            z=z_matrix,
-            x=list(range(1, 32)),
-            y=pivot_sets.index,
-            text=hover_text,
+            z=[z_vals],
+            x=full_month_days,
+            y=[month_label],
+            text=[hover_text],
             hoverinfo="text",
             colorscale=colorscale,
             showscale=False,
-            xgap=3,
-            ygap=3,
+            xgap=4,
+            ygap=4,
         )
     )
 
     fig.update_layout(
-        title="🔥 Calendari de Consistència Mensual",
-        height=320,
-        margin=dict(l=70, r=10, t=40, b=30),
-        yaxis=dict(autorange="reversed", showgrid=False, zeroline=False),
+        title=f"🔥 Consistència de l'Mes: {month_label}",
+        height=140,
+        margin=dict(l=80, r=10, t=40, b=30),
+        yaxis=dict(showgrid=False, zeroline=False),
         xaxis=dict(
             title="Dia del Mes",
             tickmode="linear",
