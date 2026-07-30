@@ -337,7 +337,7 @@ st.markdown("---")
 
 # --- 2B. DASHBOARD TABS ---
 tab1, tab2, tab3 = st.tabs([
-    "🏆 Personal Records (Max Day)",
+    "🏆 Personal Records",
     "📈 Progress & Trends",
     "📊 Muscle Distribution & Raw Data",
 ])
@@ -346,12 +346,6 @@ tab1, tab2, tab3 = st.tabs([
 # TAB 1: PERSONAL RECORDS & PER-EXERCISE SUMMARY
 # =============================================================================
 with tab1:
-    # -------------------------------------------------------------
-    # 1. LAST WORKOUT DAY DETAILS TABLE
-    # -------------------------------------------------------------
-    st.subheader("⏱️ Últim Entrenament per Exercici")
-    st.caption("Detall de les sèries realitzades en l'últim dia d'entrenament registrat per a cada exercici seleccionat.")
-
     def format_set(row):
         p = row["Pes (kg)"]
         r = row["Repeticions"]
@@ -368,37 +362,31 @@ with tab1:
     df_tab1 = df_filtered.copy()
     df_tab1["Set_Desc"] = df_tab1.apply(format_set, axis=1)
 
-    latest_dates = (
-        df_filtered.groupby("Exercici")["Data"]
-        .max()
-        .reset_index()
-    )
+    # -------------------------------------------------------------
+    # 1. LAST WORKOUT CARDS (Mobile Optimized)
+    # -------------------------------------------------------------
+    st.subheader("⏱️ Últim Entrenament per Exercici")
+    st.caption("Detall de les sèries realitzades en l'últim dia d'entrenament registrat.")
 
-    last_workout_sets = pd.merge(
-        df_tab1,
-        latest_dates,
-        on=["Exercici", "Data"],
-        how="inner"
-    ).copy()
+    latest_dates = df_filtered.groupby("Exercici")["Data"].max().reset_index()
+    last_workout_sets = pd.merge(df_tab1, latest_dates, on=["Exercici", "Data"], how="inner").copy()
+    last_workout_sets = last_workout_sets.sort_values(by="Data", ascending=False)
 
-    last_workout_summary = (
-        last_workout_sets.groupby(["Exercici", "Grup Muscular", "Data"])
-        .apply(lambda g: "<br>".join([f"<b>Sèrie {i+1}:</b> {row['Set_Desc']}" for i, (_, row) in enumerate(g.iterrows())]))
-        .reset_index(name="Detalls")
-    )
-
-    last_workout_summary = last_workout_summary.sort_values(by="Data", ascending=False).reset_index(drop=True)
-    last_workout_summary["Data de l'Últim Entrenament"] = last_workout_summary["Data"].dt.strftime("%d/%m/%Y")
-
-    last_workout_table_df = last_workout_summary[["Exercici", "Grup Muscular", "Data de l'Últim Entrenament", "Detalls"]]
-    st.markdown(last_workout_table_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+    for ex in last_workout_sets["Exercici"].unique():
+        ex_data = last_workout_sets[last_workout_sets["Exercici"] == ex]
+        mg = ex_data["Grup Muscular"].iloc[0]
+        date_str = ex_data["Data"].iloc[0].strftime("%d/%m/%Y")
+        
+        with st.expander(f"🏋️ **{ex}** ({mg}) — 📅 {date_str}"):
+            for i, (_, row) in enumerate(ex_data.iterrows()):
+                st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
 
     # -------------------------------------------------------------
-    # 2. MAX RECORD TABLE
+    # 2. MAX RECORD CARDS (Mobile Optimized)
     # -------------------------------------------------------------
     st.markdown("---")
     st.subheader("🏆 Dia de Màxim Rendiment per Exercici")
-    st.caption("Resum del dia de màxim registre (Volum, Temps o Repeticions) per a cada exercici seleccionat.")
+    st.caption("Resum del dia de màxim registre (Volum, Temps o Repeticions).")
 
     df_tab1["Ex_Type"] = np.where(
         (df_tab1["Temps (min)"] > 0) & (df_tab1["Set_Volume"] == 0),
@@ -436,35 +424,30 @@ with tab1:
 
     max_day_sets = pd.merge(
         df_tab1,
-        max_dates[["Exercici", "Data", "Max_Metric_Value"]],
+        max_dates[["Exercici", "Data", "Max_Metric_Value", "Ex_Type"]],
         on=["Exercici", "Data"],
         how="inner",
     )
+    max_day_sets = max_day_sets.sort_values(by="Max_Metric_Value", ascending=False)
 
-    max_summary = (
-        max_day_sets.groupby(["Exercici", "Grup Muscular", "Ex_Type", "Data", "Max_Metric_Value"])
-        .apply(lambda g: "<br>".join([f"<b>Sèrie {i+1}:</b> {row['Set_Desc']}" for i, (_, row) in enumerate(g.iterrows())]))
-        .reset_index(name="Detalls")
-    )
+    for ex in max_day_sets["Exercici"].unique():
+        ex_data = max_day_sets[max_day_sets["Exercici"] == ex]
+        mg = ex_data["Grup Muscular"].iloc[0]
+        date_str = ex_data["Data"].iloc[0].strftime("%d/%m/%Y")
+        ex_type = ex_data["Ex_Type"].iloc[0]
+        val = ex_data["Max_Metric_Value"].iloc[0]
 
-    def format_max_record(row):
-        val = row["Max_Metric_Value"]
-        ex_type = row["Ex_Type"]
         if ex_type == "Timed":
-            val_str = f"{int(val)}" if val == int(val) else f"{val:.1f}"
-            return f"{val_str} min"
+            val_str = f"{int(val)} min" if val == int(val) else f"{val:.1f} min"
         elif ex_type == "BW_Reps":
-            return f"{int(val):,} reps"
+            val_str = f"{int(val):,} reps"
         else:
-            return f"{val:,.0f} kg"
+            val_str = f"{val:,.0f} kg Vol"
 
-    max_summary["Registre Màxim"] = max_summary.apply(format_max_record, axis=1)
-    max_summary = max_summary.sort_values(by="Max_Metric_Value", ascending=False).reset_index(drop=True)
-    max_summary["Data del Màxim"] = max_summary["Data"].dt.strftime("%d/%m/%Y")
+        with st.expander(f"⭐ **{ex}** ({mg}) — 🏆 {val_str} ({date_str})"):
+            for i, (_, row) in enumerate(ex_data.iterrows()):
+                st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")
 
-    table_df = max_summary[["Exercici", "Grup Muscular", "Data del Màxim", "Registre Màxim", "Detalls"]]
-    st.markdown(table_df.to_html(escape=False, index=False), unsafe_allow_html=True)
-    
     # -------------------------------------------------------------
     # EXISTING TABLE: TOTALS PER EXERCISE
     # -------------------------------------------------------------
