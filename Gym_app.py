@@ -34,25 +34,21 @@ def load_data():
     data = response.data
     
     if not data:
-        # Return an empty DataFrame with expected columns if table is empty
         return pd.DataFrame(columns=[
-            "Data", "Exercici", "Grup Muscular", "Sèrie", 
-            "Pes (kg)", "Repeticions", "Volum", "Temps (min)", "Estimated_1RM"
+            "Data", "Exercici", "Grup Muscular", "Pes (kg)", 
+            "Repeticions", "Temps (min)", "Set_Volume", "Estimated_1RM"
         ])
     
     df = pd.DataFrame(data)
 
-    # Clean and rename columns to match your dashboard expectations
-    # Supabase schema uses lowercase/standard names based on your migration
+    # Map Supabase column names to the dashboard's expected names
     column_mapping = {
         "data": "Data",
         "exercici": "Exercici",
         "grup_muscular": "Grup Muscular",
-        "sèrie": "Sèrie",
-        "pes": "Pes (kg)",
+        "pes_kg": "Pes (kg)",
         "repeticions": "Repeticions",
-        "volum": "Volum",
-        "temps": "Temps (min)",
+        "temps_min": "Temps (min)",
     }
     df = df.rename(columns=column_mapping)
 
@@ -82,30 +78,17 @@ def load_data():
 def append_set_to_supabase(new_data):
     """Appends a new set entry directly to the Supabase gym_logs table."""
     
-    # 1. Determine the next set number for this exercise on this date from current data
-    df_current = load_data()
-    same_day_ex = df_current[
-        (df_current["Data"].dt.strftime("%Y-%m-%d") == new_data["Data"]) & 
-        (df_current["Exercici"] == new_data["Exercici"])
-    ]
-    set_count = len(same_day_ex) + 1
-
-    # 2. Calculate volume
-    volum = new_data["Pes (kg)"] * new_data["Repeticions"]
-
-    # 3. Map to Supabase database column names
+    # Map input data to exact Supabase table column names
     payload = {
         "data": new_data["Data"],
         "grup_muscular": new_data["Grup Muscular"],
         "exercici": new_data["Exercici"],
-        "sèrie": set_count,
-        "pes": new_data["Pes (kg)"] if new_data["Pes (kg)"] > 0 else 0,
-        "repeticions": new_data["Repeticions"] if new_data["Repeticions"] > 0 else 0,
-        "volum": volum,
-        "temps": new_data["Temps (min)"] if new_data["Temps (min)"] > 0 else 0,
+        "pes_kg": new_data["Pes (kg)"],
+        "repeticions": new_data["Repeticions"],
+        "temps_min": new_data["Temps (min)"],
     }
 
-    # 4. Insert into Supabase
+    # Insert into Supabase
     response = supabase.table("gym_logs").insert(payload).execute()
     st.cache_data.clear()
 
@@ -231,7 +214,7 @@ df_filtered = df[
 ]
 
 # -----------------------------------------------------------------------------
-# 4. MAIN DASHBOARD UI (Tabs 1, 2, 3 remain identical to your original code)
+# 4. MAIN DASHBOARD UI
 # -----------------------------------------------------------------------------
 st.title("🏋️‍♂️ Interactive Gym Performance Dashboard")
 st.markdown(
