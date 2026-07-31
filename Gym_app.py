@@ -805,24 +805,23 @@ with st.expander("📊 **Secció 3: Anàlisi i Comparativa**", expanded=False):
                     mg = ex_full_data["Grup Muscular"].iloc[0]
                     total_sessions = ex_full_data["Data"].nunique()
 
+                    # Outer Expander: Per Exercise
                     with st.expander(
                         f"📖 **{ex}** ({mg}) — {total_sessions} session(s)",
                         expanded=False,
                     ):
-                        # Group sets by workout date, most recent first
-                        grouped_by_date = ex_full_data.groupby("Data", sort=False)
-                        
-                        # Sort unique dates descending
+                        # Sort unique dates descending (newest first)
                         unique_dates = sorted(ex_full_data["Data"].unique(), reverse=True)
 
                         for workout_date in unique_dates:
                             date_sets = ex_full_data[ex_full_data["Data"] == workout_date]
                             formatted_date = pd.to_datetime(workout_date).strftime("%d/%m/%Y")
+                            set_count = len(date_sets)
 
-                            st.markdown(f"**📅 Sessió del {formatted_date}:**")
-                            for i, (_, row) in enumerate(date_sets.iterrows()):
-                                st.markdown(f"- **Sèrie {i+1}:** {row['Set_Desc']}")
-                            st.caption("")  # Tiny spacing between dates                
+                            # Nested Collapsible Container: Per Workout Day
+                            with st.status(f"📅 **Sessió del {formatted_date}** ({set_count} sèries)", expanded=False, state="complete"):
+                                for i, (_, row) in enumerate(date_sets.iterrows()):
+                                    st.markdown(f"**Sèrie {i+1}:** {row['Set_Desc']}")               
 
         # TAB 2: PROGRESSION CHARTS & ANALYTICS
         with tab2:
